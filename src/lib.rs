@@ -1,13 +1,15 @@
-use tauri::{State, Manager};
+use tauri::{State, Manager, emit, Emitter};
 use std::sync::Mutex;
 use std::net::TcpStream;
 use std::io::{Read, Write};
 use std::sync::Arc;
+use std::thread;
 
 /// Estado compartido para la conexión del servidor
 pub struct ServerConnection {
     pub stream: Option<TcpStream>,
     pub connected: bool,
+    pub address: String,
 }
 
 impl ServerConnection {
@@ -15,8 +17,38 @@ impl ServerConnection {
         Self {
             stream: None,
             connected: false,
+            address: String::new(),
         }
     }
+}
+
+/// Direction of a frame based on the root field
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FrameDirection {
+    Unknown,
+    ServerPush, // Root field 1
+    ClientRequest, // Root field 2
+    ServerReply, // Root field 3
+}
+
+impl FrameDirection {
+    pub fn from_root_field(field: u32) -> Self {
+        match field {
+            1 => FrameDirection::ServerPush,
+            2 => FrameDirection::ClientRequest,
+            3 => FrameDirection::ServerReply,
+            _ => FrameDirection::Unknown,
+        }
+    }
+}
+
+/// Parsed envelope frame
+#[derive(Debug, Clone)]
+pub struct EnvelopeFrame {
+    pub found: bool,
+    pub direction: FrameDirection,
+    pub opcode: Option<String>,
+    pub payload: Vec<u8>,
 }
 
 /// Protocol utilities for Jondo/DreamFus wire format
@@ -64,8 +96,42 @@ pub mod protocol {
         result
     }
 
+    /// Reads a single field from a byte stream, returns (field_number, wire_type, bytes)
+    fn read_field(data: &[u8], pos: usize) -> Option<(u32, u32, usize, usize)> {
+        if pos >= data.len() {
+            return None;
+        }
+        
+        let (tag, bytes_read) = read_varint(data)?;
+        let field_number = tag >> 3;
+        let wire_type = tag & 0x7;
+        
+        if pos + bytes_read >= data.len() {
+            return None;
+        }
+        
+        // Read length of the field bytes (for wire type 2, length-delimited)
+        if wire_type == 2 {
+            let (length, len_bytes) = read_varint(&data[pos + bytes_read..])?;
+            let field_end = pos + bytes_read + len_bytes + length as usize;
+            if field_end > data.len() {
+                return None;
+            }
+            return Some((
+                field_number,
+                wire_type,
+                field_end,
+                pos + bytes_read + len_bytes,
+            ));
+        }
+        
+        // For other wire types, we need to parse differently
+        // For simplicity, assume length-delimited for now
+        None
+    }
+
     /// Reads a frame from a stream with VarInt length prefix
-    pub fn read_frame(stream: &mut TcpStream, _timeout_ms: u64) -> Option<Vec<u8>> {
+    pub fn read_frame(stream: &mut TcpStream) -> Option<Vec<u8>> {
         // Read VarInt length (max 5 bytes for u32)
         let mut len_bytes = [0u8; 5];
 
@@ -107,6 +173,94 @@ pub mod protocol {
         stream.write_all(payload)?;
         stream.flush()
     }
+
+    /// Open a Any field from bytes (field 1 = type URL, field 2 = value)
+    pub fn open_any(bytes: &[u8]) -> Option<(String, Vec<u8>)> {
+        // Parse the Any message: field 1 = TypePrefix + opcode, field 2 = value bytes
+        let mut pos = 0;
+        let mut type_url: Option<String> = None;
+        let mut value_bytes: Vec<u8> = Vec::new();
+        
+        while pos < bytes.len() {
+            let (tag, bytes_read) = read_varint(&bytes[pos..])?;
+            let field_number = tag >> 3;
+            let wire_type = tag & 0x7;
+            
+            if wire_type != 2 {
+                break; // Only handle length-delimited
+            }
+            
+            if pos + bytes_read >= bytes.len() {
+                break;
+            }
+            
+            let (length, len_bytes) = read_varint(&bytes[pos + bytes_read..])?;
+            let field_end = pos + bytes_read + len_bytes + length as usize;
+            
+            if field_end > bytes.len() {
+                break;
+            }
+            
+            let field_bytes = &bytes[pos + bytes_read + len_bytes..field_end];
+            
+            if field_number == 1 {
+                // Type URL should start with "type.ankama.com/"
+                if field_bytes.len() > 20 {
+                    let prefix = std::str::from_utf8(&field_bytes[..20]).ok()?;
+                    if prefix == "type.ankama.com/" {
+                        type_url = Some(String::from_utf8_lossy(&field_bytes[20..]).to_string());
+                    }
+                }
+            } else if field_number == 2 {
+                value_bytes = field_bytes.to_vec();
+            }
+            
+            pos = field_end;
+        }
+        
+        type_url.map(|url| (url, value_bytes))
+    }
+
+    /// Parse a frame into direction, opcode, and payload
+    pub fn parse_frame(frame: &[u8]) -> EnvelopeFrame {
+        if frame.is_empty() {
+            return EnvelopeFrame { found: false, direction: FrameDirection::Unknown, opcode: None, payload: Vec::new() };
+        }
+
+        // Read the root tag
+        let (tag, bytes_read) = match read_varint(frame) {
+            Some(v) => v,
+            None => return EnvelopeFrame { found: false, direction: FrameDirection::Unknown, opcode: None, payload: Vec::new() },
+        };
+
+        let root_field = tag >> 3;
+        let _wire_type = tag & 0x7;
+
+        let direction = FrameDirection::from_root_field(root_field);
+
+        // Try to open as an Any message
+        if bytes_read < frame.len() {
+            if let Some((opcode, payload)) = open_any(&frame[bytes_read..]) {
+                return EnvelopeFrame {
+                    found: true,
+                    direction,
+                    opcode: Some(opcode),
+                    payload,
+                };
+            }
+        }
+
+        EnvelopeFrame { found: true, direction, opcode: None, payload: frame[bytes_read..].to_vec() }
+    }
+}
+
+/// Message received from server
+#[derive(Debug, Clone)]
+pub struct ServerMessage {
+    pub direction: FrameDirection,
+    pub opcode: Option<String>,
+    pub opcode_str: String,
+    pub raw_payload: Vec<u8>,
 }
 
 // TCP Bridge commands
@@ -115,6 +269,7 @@ fn connect_server(
     state: State<Arc<Mutex<ServerConnection>>>,
     host: String,
     port: u16,
+    app: tauri::AppHandle,
 ) -> Result<String, String> {
     let addr = format!("{}:{}", host, port);
 
@@ -131,9 +286,62 @@ fn connect_server(
             // Set read timeout
             stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
 
-            let mut conn = state.inner().lock().unwrap();
-            conn.stream = Some(stream);
-            conn.connected = true;
+            {
+                let mut conn = state.inner().lock().unwrap();
+                conn.stream = Some(stream);
+                conn.connected = true;
+                conn.address = addr.clone();
+            }
+            
+            // Clone app handle for the receiver thread
+            let app_handle = app.clone();
+            
+            // Spawn a thread to receive messages
+            thread::spawn(move || {
+                loop {
+                    // Check connection status
+                    let connected = {
+                        let conn = state.inner().lock().unwrap();
+                        if !conn.connected {
+                            break;
+                        }
+                        true
+                    };
+                    
+                    if !connected {
+                        break;
+                    }
+                    
+                    // Try to read a frame
+                    let stream_result = {
+                        let conn = state.inner().lock().unwrap();
+                        conn.stream.as_mut()
+                    };
+                    
+                    if let Some(mut stream) = stream_result {
+                        // Try to read a frame
+                        if let Some(raw_frame) = protocol::read_frame(&mut stream) {
+                            // Parse the envelope
+                            let envelope = protocol::parse_frame(&raw_frame);
+                            
+                            // Build message for frontend
+                            let message = ServerMessage {
+                                direction: envelope.direction,
+                                opcode: envelope.opcode.clone(),
+                                opcode_str: envelope.opcode.clone().unwrap_or_else(|| "unknown".to_string()),
+                                raw_payload: raw_frame,
+                            };
+                            
+                            // Emit the parsed message to the frontend
+                            let _ = app_handle.emit("server-message", message);
+                        }
+                    }
+                    
+                    // Small sleep to prevent busy-looping
+                    thread::sleep(std::time::Duration::from_millis(50));
+                }
+            });
+
             Ok(format!("Connected to {}", addr))
         }
         Err(e) => Err(format!("Error connecting to {}: {}", addr, e)),
@@ -145,13 +353,14 @@ fn disconnect_server(state: State<Arc<Mutex<ServerConnection>>>) -> Result<Strin
     let mut conn = state.inner().lock().unwrap();
     conn.stream = None;
     conn.connected = false;
+    conn.address = String::new();
     Ok("Disconnected from server".to_string())
 }
 
 #[tauri::command]
 fn get_server_status(state: State<Arc<Mutex<ServerConnection>>>) -> String {
     let conn = state.inner().lock().unwrap();
-    if conn.connected { "Connected".to_string() } else { "Disconnected".to_string() }
+    if conn.connected { format!("Connected to {}", conn.address) } else { "Disconnected".to_string() }
 }
 
 #[tauri::command]
@@ -163,15 +372,20 @@ fn send_message(
     // Decode hex payload (support both with and without 0x prefix)
     let hex_str = if payload_hex.starts_with("0x") {
         &payload_hex[2..]
+    } else if payload_hex.is_empty() {
+        ""
     } else {
         &payload_hex
     };
-    let payload = hex::decode(hex_str)
-        .map_err(|e| format!("Invalid hex payload: {}", e))?;
+    let payload = if hex_str.is_empty() {
+        Vec::new()
+    } else {
+        hex::decode(hex_str).map_err(|e| format!("Invalid hex payload: {}", e))?
+    };
 
     // Build envelope with opcode
-    // Simple envelope: field 1 = opcode string, field 2 = payload bytes
-    let envelope = build_envelope(&opcode, &payload);
+    // Use field 1 = client-request (direction) for outbound messages
+    let envelope = build_envelope(&opcode, &payload, FrameDirection::ClientRequest);
 
     let mut conn = state.inner().lock().unwrap();
     if conn.stream.is_none() {
@@ -185,28 +399,37 @@ fn send_message(
     Ok(format!("Message sent: {}", opcode))
 }
 
-/// Builds a simple protobuf envelope with the given opcode and payload.
-/// Uses field 1 for type URL and field 2 for payload bytes (Any format).
-fn build_envelope(opcode: &str, payload: &[u8]) -> Vec<u8> {
+/// Builds a protobuf envelope with the given opcode and payload.
+/// Uses root field 2 to indicate client request direction.
+fn build_envelope(opcode: &str, payload: &[u8], direction: FrameDirection) -> Vec<u8> {
     let mut result = Vec::new();
 
-    // Field 1: type.ankama.com/{opcode} as string
+    // Determine root field based on direction
+    // Field 1 = server-push, Field 2 = client-request, Field 3 = server-reply
+    let root_tag = match direction {
+        FrameDirection::ServerPush => 1 << 3 | 2,    // Field 1, wire type 2 (length-delimited)
+        FrameDirection::ClientRequest => 2 << 3 | 2,  // Field 2, wire type 2
+        FrameDirection::ServerReply => 3 << 3 | 2,  // Field 3, wire type 2
+        FrameDirection::Unknown => 1 << 3 | 2,       // Default to server-push
+    };
+
+    // Outer envelope with direction at root
+    // Inner Any message: field 1 = type URL, field 2 = payload
+    
+    // Field 1 of inner Any: type.ankama.com/{opcode}
     let type_url = format!("type.ankama.com/{}", opcode);
     let type_url_bytes = type_url.as_bytes();
-    result.extend(protocol::write_varint(1 << 3 | 2)); // Field 1, wire type 2 (length-delimited)
+    result.extend(protocol::write_varint(1 << 3 | 2)); // Inner field 1, wire type 2
     result.extend(protocol::write_varint(type_url_bytes.len() as u32));
     result.extend(type_url_bytes);
 
-    // Field 2: payload as bytes
-    result.extend(protocol::write_varint(2 << 3 | 2)); // Field 2, wire type 2
+    // Field 2 of inner Any: actual payload
+    result.extend(protocol::write_varint(2 << 3 | 2)); // Inner field 2, wire type 2
     result.extend(protocol::write_varint(payload.len() as u32));
     result.extend(payload);
 
     result
 }
-
-// Add hex crate to decode payloads
-// Note: In a full implementation, we'd use the 'hex' crate or implement manual decoding
 
 fn main() {
     tauri::Builder::default()
