@@ -1,0 +1,22 @@
+[package]
+name = "dreamfus-client"
+version = "0.1.0"
+description = "DreamFus Client - Dofus 3 client with JSON/CSS editable UI"
+authors = ["Perroaa94"]
+license = "MIT"
+repository = "https://github.com/Pevalcar/dreamfus-client"
+edition = "2021"
+rust-version = "1.69"
+
+[lib]
+name = "dreamfus_client"
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[dependencies]
+tauri = { version = "2", features = ["custom-protocol"] }
+
+[profile.release]
+opt-level = 2
