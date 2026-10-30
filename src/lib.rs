@@ -400,33 +400,41 @@ fn send_message(
 }
 
 /// Builds a protobuf envelope with the given opcode and payload.
-/// Uses root field 2 to indicate client request direction.
+/// Uses root field to indicate direction (1=server-push, 2=client-request, 3=server-reply).
 fn build_envelope(opcode: &str, payload: &[u8], direction: FrameDirection) -> Vec<u8> {
     let mut result = Vec::new();
 
     // Determine root field based on direction
     // Field 1 = server-push, Field 2 = client-request, Field 3 = server-reply
-    let root_tag = match direction {
-        FrameDirection::ServerPush => 1 << 3 | 2,    // Field 1, wire type 2 (length-delimited)
-        FrameDirection::ClientRequest => 2 << 3 | 2,  // Field 2, wire type 2
-        FrameDirection::ServerReply => 3 << 3 | 2,  // Field 3, wire type 2
-        FrameDirection::Unknown => 1 << 3 | 2,       // Default to server-push
+    let root_field = match direction {
+        FrameDirection::ServerPush => 1u32,
+        FrameDirection::ClientRequest => 2u32,
+        FrameDirection::ServerReply => 3u32,
+        FrameDirection::Unknown => 1u32, // Default to server-push
     };
 
-    // Outer envelope with direction at root
-    // Inner Any message: field 1 = type URL, field 2 = payload
+    // Root tag: field number << 3 | wire type (2 = length-delimited)
+    let root_tag = root_field << 3 | 2;
+
+    // First, build the inner Any message
+    let mut inner_any = Vec::new();
     
     // Field 1 of inner Any: type.ankama.com/{opcode}
     let type_url = format!("type.ankama.com/{}", opcode);
     let type_url_bytes = type_url.as_bytes();
-    result.extend(protocol::write_varint(1 << 3 | 2)); // Inner field 1, wire type 2
-    result.extend(protocol::write_varint(type_url_bytes.len() as u32));
-    result.extend(type_url_bytes);
+    inner_any.extend(protocol::write_varint(1 << 3 | 2)); // Inner field 1, wire type 2
+    inner_any.extend(protocol::write_varint(type_url_bytes.len() as u32));
+    inner_any.extend(type_url_bytes);
 
     // Field 2 of inner Any: actual payload
-    result.extend(protocol::write_varint(2 << 3 | 2)); // Inner field 2, wire type 2
-    result.extend(protocol::write_varint(payload.len() as u32));
-    result.extend(payload);
+    inner_any.extend(protocol::write_varint(2 << 3 | 2)); // Inner field 2, wire type 2
+    inner_any.extend(protocol::write_varint(payload.len() as u32));
+    inner_any.extend(payload);
+
+    // Wrap the inner Any as the value of the root field
+    result.extend(protocol::write_varint(root_tag)); // Root field tag
+    result.extend(protocol::write_varint(inner_any.len() as u32)); // Length of inner Any
+    result.extend(inner_any);
 
     result
 }
