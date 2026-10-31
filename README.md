@@ -1,115 +1,144 @@
 # DreamFus Client
 
-**A Dofus 3 client re-engineered for DreamFus server.**
+> **Regla de Oro:** DreamFus Client es un proyecto fan-made que recrea mecánicas, apariencia, animaciones e interfaces del juego Dofus usando únicamente assets y formatos como placeholders temporales. Todo lo que puedas usar sin restricciones, sin dilemas. Estamos usando esos assets porque los quiero como placeholders para que más tarde yo use ese mismo estilo de animaciones, interfaces, etc. **TODO: música, sprites, sonidos.**
 
-This client is built on **Tauri (Rust + WebView2)** and uses a **data-driven UI architecture**. All interfaces are defined in external JSON/CSS files (`.dfui` / `.dfss`), allowing hot-reload without recompiling the binary.
+---
 
-## Key Features
+## 🌟 Propósito
 
-- **100% editable UI**: Edit `.dfui` and `.dfss` files, save, see changes instantly.
-- **No IL2CPP / MelonLoader**: Native Rust bridge to the server's TCP protocol.
-- **Protocol compatible**: Uses the same `Jondo.Unity.Server` wire format (VarInt-prefixed Protobuf).
-- **Future-proof**: Works with any Dofus 3 server that speaks the DreamFus protocol.
+Crear un cliente alternativo que:
+- **Mecánicas:** Reimplemente el protocolo de Jondo desde cero
+- **Apariencia:** Use el mismo estilo visual que el juego original
+- **Animaciones:** Implemente sistemas de animación propios basados en el estilo de Dofus
+- **Interfaz:** Siga la especificación DreamFus UI (documentada en `dreamfus-ui/`)
 
-## Development Status
+---
 
-| Phase | Description | Status |
-|-------|-------------|--------|
-| FASE 0 | TCP Socket Bridge & Asset Parser | ✅ Complete |
-| FASE 1 | Map Rendering (Native Cell-based) | ◯ Planned |
-| FASE 2 | DreamFus UI Engine (JSON/CSS) | ◯ Planned |
-
-## Wire Protocol
-
-The protocol uses VarInt-prefixed Protobuf messages with the following structure:
-
-```
-[VarInt Length][Frame]
-  where Frame = { RootField: 1|2|3, InnerAny: { field1: "type.ankama.com/OPCODE", field2: payload } }
-```
-
-- **Root field 1**: Server push (unsolicited messages from server)
-- **Root field 2**: Client request (messages sent by client)
-- **Root field 3**: Server reply (answers to client requests)
-
-The inner Any message contains:
-- Field 1: Type URL (`type.ankama.com/` + opcode)
-- Field 2: Payload bytes
-
-## Build Requirements
-
-```bash
-cargo install tauri-cli
-cd dreamfus-client
-cargo build
-```
-
-## Testing Connection
-
-### Prerequisites
-
-1. Start the Jondo server:
-   ```powershell
-   cd C:\Users\pevalcar\Proyects\jondo-servidor
-   dotnet run --project Jondo.Unity.Server/Jondo.Unity.Server.csproj
-   ```
-
-2. The server listens on:
-   - **5555**: Game server (TCP, binary protocol)
-   - **6337**: Chat server (TCP)
-   - **8888**: HAAPI/Launcher API (HTTP)
-   - **15881**: Zaap (TCP/HTTP/WebSocket)
-
-### Testing the Client
-
-Build and run the client:
-```bash
-cd dreamfus-client
-cargo tauri dev
-```
-
-Then:
-1. Connect to `localhost:5555` (game server)
-2. Send test opcodes like `hello` or `knx`
-3. View received messages in the log panel
-
-### Testing with a Real Message
-
-Try sending a Hello message to get the server greeting:
-- Opcode: `kuf` (CharacterExperienceGainEvent example)
-- Or try `knx` for server list
-
-## Project Structure
+## 📁 Estructura del Proyecto
 
 ```
 dreamfus-client/
-├── Cargo.toml          # Rust dependencies (tauri 2.x, hex)
-├── build.rs            # Tauri build script
-├── tauri.conf.json     # Tauri configuration
-├── src/
-│   └── lib.rs          # Main Rust code (TCP bridge, protocol)
-└── dist/
-    └── index.html      # Test UI with connection controls
+├── package.json           # Configuración del proyecto Node.js/Vite
+├── vite.config.js         # Configuración del build
+├── README.md              # Este archivo
+├── .gitignore             # Assets grandes, node_modules, etc.
+│
+└── frontend/              # Cliente web (Vite)
+    ├── index.html         # Punto de entrada HTML
+    ├── main.js            # Auto-conexión, flujo principal
+    ├── EventBus.js        # Sistema centralizado de eventos
+    ├── protocol.js        # WebSocket + Mock mode para testing
+    ├── dfui/              # Motor DFUI (referencia a dreamfus-ui)
+    │   ├── components.dfss # Estilos DFUI
+    │   └── index.js       # Renderizador
+    │
+    └── ui/
+        ├── UIManager.js    # Gestor de screens
+        └── screens/
+            ├── characterSelect.js
+            ├── login.js
+            └── mainMenu.js
 ```
 
-## Architecture
+---
 
-### Rust/Tauri Layer
-- TCP socket bridge to Jondo server
-- VarInt/PB frame encoding/decoding
-- Tauri commands: `connect_server`, `disconnect_server`, `send_message`, `get_server_status`
-- Event emission: `server-message` for received frames
+## 🚀 Auto-Conexión (Funcionalidad Implementada)
 
-### Future UI Layer (FASE 2)
-- JSON/CSS driven UI (like Alea's DreamFus client)
-- `.dfui` files for interface definitions
-- `.dfss` files for stylesheet definitions
+### Flujo Automático
 
-## License
+```mermaid
+sequenceDiagram
+    participant M as main.js
+    participant U as UIManager
+    participant P as Protocol
+    participant E as EventBus
+    participant C as CharacterSelect
 
-MIT
+    M->>U: loadUI('characterSelect')
+    U->>C: init()
+    C->>E: registerMessageHandler('charactersList')
+    M->>P: connect(localhost:5555)
+    P-->>P: WebSocket falla (TCP real)
+    P-->>M: { success: true, mock: true }
+    M->>E: sendMockLoginFlow()
+    E->>C: handleCharacters()
+    C->>C: renderCharacters()
+```
 
-## Related Projects
+### Mock Characters (Testing)
 
-- [Jondo Server](../) - The Rust-compatible C# server
-- [DreamFus Client GitHub](https://github.com/Pevalcar/dreamfus-client) - Public repository for this client
+```json
+{
+  "characters": [
+    {
+      "name": "Aldric",
+      "class": "Sadida",
+      "level": 15,
+      "breed": 10
+    },
+    {
+      "name": "Yuki", 
+      "class": "Xelor",
+      "level": 12,
+      "breed": 5
+    }
+  ]
+}
+```
+
+---
+
+## 🎨 Desarrollo
+
+### Setup Local
+
+```bash
+# 1. Tener Alea instalado (para assets reales)
+# 2. Ir al cliente
+cd dreamfus-client/frontend
+npm install
+npm run dev
+```
+
+### Auto-Conexión Demo
+
+```bash
+# Ver en: http://localhost:1420
+# Sin login screen - va directo a characterSelect
+# Usa assets de Alea (placeholder temporal)
+```
+
+---
+
+## 📚 Referencias
+
+- **DreamFus UI Specification:** `dreamfus-ui/docs/` (submodule)
+- **Protocolo Jondo:** `docs/unknown-packets.md`
+- **UI CLIENTE:** `docs/UI-CLIENTE.md`
+
+---
+
+## ⚠️ Notas de Assets
+
+Los assets de Alea se usan como **placeholders**:
+
+| Tipo | Ubicación Temporal | Nota |
+|------|-------------------|------|
+| uitk/uxml/*.json | `assets/uitk/uxml/` | Screens JSON |
+| uitk/uss/*.css | `assets/uitk/uss/` | Estilos CSS |
+| uitk/img/ | `assets/uitk/img/` | Sprites UI |
+| uitk/fonts/ | `assets/uitk/fonts/` | Fuentes |
+
+**Estos assets NO se distribuyen en el repositorio.** El usuario debe obtenerlos de su instalación de Alea:
+```
+C:\Users\USER\AppData\Local\Alea\app-\version\assets\
+```
+
+---
+
+## 🔄 Futuro
+
+1. **Implementar client Tauri/Rust** como Alea
+2. **Crear assets propios** con el mismo estilo
+3. **Sin dependencias de Alea** - completamente independiente
+4. **Distribución como .exe** usando el mismo pipeline de Alea

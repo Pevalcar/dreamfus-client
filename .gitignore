@@ -1,16 +1,27 @@
-# Rust
-target/
-Cargo.lock
+# Assets grandes de Alea (NO se distribuyen) - placeholders temporales
+assets/
+!assets/.gitkeep
 
-# IDE
-.vscode/
-*.swp
-*.swo
-*~
+# Dependencias de Node.js
+node_modules/
+*.vite/
 
-# OS
+# Build
+dist/
+out/
+artifacts/
+*.log
+
+# Temporales
+*.tmp
+*.temp
 .DS_Store
 Thumbs.db
 
-# Tauri
-dist/
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# NPM
+package-lock.json
