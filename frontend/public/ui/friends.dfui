@@ -1,0 +1,125 @@
+{
+  "t": "WindowFigma",
+  "a": {
+    "is-modal": "false",
+    "is-movable": "false",
+    "has-shadow": "true",
+    "title": "Amigos"
+  },
+  "s": "width: 400px; height: 500px;",
+  "k": [
+    {
+      "t": "DofusVisualElement",
+      "n": "content",
+      "a": { "gap-value": "4" },
+      "s": "padding: 12px; flex: 1; overflow: hidden;",
+      "k": [
+        {
+          "t": "DofusLabel",
+          "n": "title",
+          "a": { "tabindex": "-1", "text": "Lista de Amigos" },
+          "c": ["font-title", "text-center"],
+          "s": "font-size: 18px; color: var(--text-gold); margin-bottom: 4px;"
+        },
+        {
+          "t": "DofusLabel",
+          "n": "subtitle",
+          "a": { "tabindex": "-1", "text": "Amigos (5)" },
+          "c": ["text-white-60"],
+          "s": "font-size: 12px; margin-bottom: 8px;"
+        },
+        {
+          "t": "DofusVisualElement",
+          "n": "friendList",
+          "s": "flex: 1; overflow-y: auto;",
+          "k": [
+            {
+              "t": "ListView",
+              "n": "listView",
+              "a": { "data-count": "5" },
+              "s": "gap: 1;",
+              "k": [
+                {
+                  "t": "ListItem",
+                  "n": "friend1",
+                  "a": { 
+                    "data-name": "PlayerOne", 
+                    "data-status": "online", 
+                    "data-action": "friend-click" 
+                  },
+                  "c": ["friend-item"],
+                  "s": "padding: 8px 12px;",
+                  "k": [
+                    {
+                      "t": "DofusLabel",
+                      "n": "friendName",
+                      "a": { "text": "PlayerOne" },
+                      "s": "font-weight: 600;"
+                    },
+                    {
+                      "t": "DofusLabel",
+                      "n": "friendStatus",
+                      "a": { "text": "En línea" },
+                      "s": "font-size: 12px; color: var(--text-white-60);"
+                    }
+                  ]
+                },
+                {
+                  "t": "ListItem",
+                  "n": "friend2",
+                  "a": { 
+                    "data-name": "PlayerTwo", 
+                    "data-status": "offline", 
+                    "data-action": "friend-click" 
+                  },
+                  "c": ["friend-item"],
+                  "s": "padding: 8px 12px;",
+                  "k": [
+                    {
+                      "t": "DofusLabel",
+                      "n": "friendName",
+                      "a": { "text": "PlayerTwo" },
+                      "s": "font-weight: 600;"
+                    },
+                    {
+                      "t": "DofusLabel",
+                      "n": "friendStatus",
+                      "a": { "text": "Fuera de línea" },
+                      "s": "font-size: 12px; color: var(--text-white-60);"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "DofusVisualElement",
+      "n": "footer",
+      "a": { "gap-value": "2" },
+      "s": "border-top: 1px solid var(--border-dark); padding: 8px 12px;",
+      "k": [
+        {
+          "t": "DofusButtonCustom",
+          "n": "btnAddFriend",
+          "a": { "text": "+", "main-style": "secondary", "data-action": "open-add-friend" },
+          "s": "width: 32px; height: 32px; border-radius: 50%; font-size: 18px; padding: 0;"
+        },
+        {
+          "t": "DofusButtonCustom",
+          "n": "btnRefresh",
+          "a": { "text": "Refrescar", "main-style": "secondary", "data-action": "refresh-friends" },
+          "s": "flex: 1; font-size: 12px; padding: 6px 12px;"
+        },
+        {
+          "t": "DofusButtonCustom",
+          "n": "btnBack",
+          "a": { "text": "Salir", "main-style": "secondary", "data-action": "disconnect" },
+          "s": "width: 80px; font-size: 12px; padding: 6px 12px;"
+        }
+      ]
+    }
+  ]
+}

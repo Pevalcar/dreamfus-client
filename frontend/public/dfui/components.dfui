@@ -1,0 +1,79 @@
+{
+  "WindowFigma": {
+    "t": "WindowFigma",
+    "a": {
+      "is-modal": "false",
+      "is-movable": "true",
+      "has-shadow": "true",
+      "header-style": "primary",
+      "title": ""
+    },
+    "s": "position: relative; width: 100%; max-width: 600px;",
+    "k": [
+      {
+        "t": "DofusVisualElement",
+        "n": "header",
+        "a": { "data-drag-handle": "true" },
+        "s": "display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(180deg, var(--background-medium-100) 0%, var(--background-dark-100) 100%); border-bottom: 1px solid var(--border-dark); cursor: move;",
+        "k": [
+          {
+            "t": "DofusLabel",
+            "n": "title",
+            "a": { "tabindex": "-1" },
+            "c": ["dfui-window-title"],
+            "txt": ""
+          },
+          {
+            "t": "DofusButtonCustom",
+            "n": "closeBtn",
+            "a": { "text": "✕", "main-style": "secondary", "data-action": "close" },
+            "s": "width: 28px; height: 28px; min-width: 28px; padding: 0; font-size: 14px;"
+          }
+        ]
+      },
+      {
+        "t": "DofusVisualElement",
+        "n": "content",
+        "c": ["dfui-window-content"],
+        "k": []
+      }
+    ]
+  },
+  "DofusButtonCustom": {
+    "t": "DofusButtonCustom",
+    "a": {
+      "text": "Button",
+      "main-style": "primary"
+    },
+    "s": "min-width: 120px;"
+  },
+  "DofusLabel": {
+    "t": "DofusLabel",
+    "a": {
+      "tabindex": "-1"
+    },
+    "txt": "Label"
+  },
+  "TextInput": {
+    "t": "TextInput",
+    "a": {
+      "type": "text",
+      "placeholder-text": ""
+    },
+    "s": "width: 100%; min-height: 40px;"
+  },
+  "SlotGrid": {
+    "t": "SlotGrid",
+    "a": {
+      "fixed-column-count": "12",
+      "item-size": "51",
+      "gap-slot": "2"
+    },
+    "s": "display: grid; gap: 8px;"
+  },
+  "Slot": {
+    "t": "Slot",
+    "a": {},
+    "s": "aspect-ratio: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border-dark); border-radius: 4px;"
+  }
+}

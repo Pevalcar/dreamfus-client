@@ -1,0 +1,30 @@
+/* Friends/Social Screen Styles */
+
+#friendsListContainer {
+    max-height: 300px;
+}
+
+.friend-item {
+    transition: background-color 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.friend-item[data-status="online"] {
+    border-left-color: var(--success);
+}
+
+.friend-item[data-status="offline"] {
+    border-left-color: var(--text-white-40);
+}
+
+.friend-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    margin-left: 4px;
+}
+
+.friend-status {
+    font-size: 12px;
+    min-width: 80px;
+    display: inline-block;
+    text-align: right;
+}
