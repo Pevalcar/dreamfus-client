@@ -25,3 +25,18 @@ Thumbs.db
 
 # NPM
 package-lock.json
+
+# Rust/Build artifacts
+target/
+Cargo.lock
+
+# Temp/Generated
+.agents/
+CHANGELOG.md
+docs/
+gen/
+skills-lock.json
+src-tauri/
+test/
+tests/
+verify_protocol.ps1
