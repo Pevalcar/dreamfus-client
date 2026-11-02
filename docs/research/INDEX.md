@@ -43,6 +43,7 @@ servidor.
 | [ALEA-AUDIT-OUTPUT.md](./ALEA-AUDIT-OUTPUT.md) | Formato de salida para una auditoría de UI y assets |
 | [ALEA-LOCAL-AUDIT-2026-11-01.md](./ALEA-LOCAL-AUDIT-2026-11-01.md) | Auditoría real de la instalación local: UI, audio, hechizos, efectos, mapas y mundo |
 | [ALEA-INTERFACE-MIGRATION.md](./ALEA-INTERFACE-MIGRATION.md) | Inventario y plan para migrar interfaces completas de Alea a DFUI con trazabilidad de derechos |
+| [LOCAL-ALEA-RUNTIME.md](./LOCAL-ALEA-RUNTIME.md) | Contrato de runtime local: resolución de assets, launcher, servidor de pruebas y reglas para futuras IAs |
 | [JONDO-WEBCLIENT-RESEARCH.md](./JONDO-WEBCLIENT-RESEARCH.md) | Qué puede aportar el WebClient decompilado y límites de reutilización |
 | [AI-HANDOFF.md](./AI-HANDOFF.md) | Procedimiento para que otra IA continúe la investigación y la implementación |
 

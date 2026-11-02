@@ -1,6 +1,7 @@
 # Assets grandes de Alea (NO se distribuyen) - placeholders temporales
 assets/
 !assets/.gitkeep
+dreamfus.runtime.json
 
 # Dependencias de Node.js
 node_modules/

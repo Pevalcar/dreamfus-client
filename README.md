@@ -125,9 +125,13 @@ combate, movimiento, chat, inventario, mundo, personajes, mapas y entidades,
 además de referencias públicas y sus restricciones de licencia. Es la guía
 para continuar el cliente sin depender de una conversación anterior.
 
-La instalación local de Alea puede servir para auditar nombres, jerarquías,
-estilos, manifests y metadatos de UI. No es una dependencia del build y sus
-assets no se distribuyen en este repositorio.
+La instalación local autorizada de Alea puede usarse como proveedor de recursos
+en desarrollo y pruebas. El contrato de resolución, las carpetas esperadas, el
+aislamiento del servidor y el flujo para el launcher están documentados en
+[`docs/research/LOCAL-ALEA-RUNTIME.md`](docs/research/LOCAL-ALEA-RUNTIME.md).
+La conexión runtime todavía debe implementarse mediante un `AssetCatalog` de
+Tauri/Rust; actualmente las pantallas usan los fixtures incluidos en
+`frontend/public`.
 
 ---
 
@@ -142,16 +146,19 @@ Los assets de Alea se usan como **placeholders**:
 | uitk/img/ | `assets/uitk/img/` | Sprites UI |
 | uitk/fonts/ | `assets/uitk/fonts/` | Fuentes |
 
-**Estos assets NO se distribuyen en el repositorio.** El usuario debe obtenerlos de su instalación de Alea:
+**Estos assets no se distribuyen por defecto en el repositorio.** El usuario
+debe configurar una instalación autorizada mediante una configuración local
+basada en [`dreamfus.runtime.example.json`](dreamfus.runtime.example.json):
 ```
-C:\Users\USER\AppData\Local\Alea\app-\version\assets\
+C:\ruta\de\la\instalacion\
 ```
 
 ---
 
 ## 🔄 Futuro
 
-1. **Implementar client Tauri/Rust** como Alea
-2. **Crear assets propios** con el mismo estilo
-3. **Sin dependencias de Alea** - completamente independiente
-4. **Distribución como .exe** usando el mismo pipeline de Alea
+1. Implementar el `AssetCatalog` Tauri/Rust.
+2. Migrar pantallas y proveedores por categorías.
+3. Mantener fixtures para colaboradores sin Alea.
+4. Añadir el launcher con rutas explícitas y servidor de pruebas aislado.
+5. Publicar solo recursos cuya redistribución esté documentada.
