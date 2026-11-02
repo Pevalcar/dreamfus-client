@@ -42,6 +42,7 @@ servidor.
 | [ALEA-DATA-GUIDE.md](./ALEA-DATA-GUIDE.md) | Qué catalogar de una instalación local de Alea y cómo convertirlo en componentes propios |
 | [ALEA-AUDIT-OUTPUT.md](./ALEA-AUDIT-OUTPUT.md) | Formato de salida para una auditoría de UI y assets |
 | [ALEA-LOCAL-AUDIT-2026-11-01.md](./ALEA-LOCAL-AUDIT-2026-11-01.md) | Auditoría real de la instalación local: UI, audio, hechizos, efectos, mapas y mundo |
+| [ALEA-INTERFACE-MIGRATION.md](./ALEA-INTERFACE-MIGRATION.md) | Inventario y plan para migrar interfaces completas de Alea a DFUI con trazabilidad de derechos |
 | [JONDO-WEBCLIENT-RESEARCH.md](./JONDO-WEBCLIENT-RESEARCH.md) | Qué puede aportar el WebClient decompilado y límites de reutilización |
 | [AI-HANDOFF.md](./AI-HANDOFF.md) | Procedimiento para que otra IA continúe la investigación y la implementación |
 
