@@ -46,6 +46,10 @@ servidor.
 - El punto de partida revisado es la rama
   `feature/wire-protocol-implementation`, commit
   `26ed3573bac4052d674837a738aec78881efdeb7`.
+- El README histórico contiene rutas que ya no coinciden exactamente con esta
+  rama (por ejemplo, menciona `src-tauri` y algunos archivos directamente bajo
+  `frontend/`). La fuente de verdad para esta revisión es el árbol real del
+  commit: `src/lib.rs` y `frontend/src/`.
 - Los proyectos externos son referencias de lectura. No se ha copiado código,
   assets, mapas, sonidos, fuentes, sprites ni datos de cuentas.
 - Las afirmaciones sobre proyectos externos deben verificarse en el commit
@@ -59,4 +63,3 @@ implementación propia. Copiar código requiere comprobar la licencia de ese
 repositorio y de cada asset. Copiar archivos de un cliente oficial, extraer
 recursos propietarios o redistribuirlos no queda autorizado por el hecho de
 que estén disponibles en Internet.
-
