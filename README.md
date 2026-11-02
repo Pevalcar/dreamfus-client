@@ -117,6 +117,8 @@ npm run dev
 - **UI CLIENTE:** `docs/UI-CLIENTE.md`
 - **Investigación y diseño del cliente:** [`docs/research/INDEX.md`](docs/research/INDEX.md)
 - **Datos y UI de Alea:** [`docs/research/ALEA-DATA-GUIDE.md`](docs/research/ALEA-DATA-GUIDE.md)
+- **Auditoría local de Alea:** [`docs/research/ALEA-LOCAL-AUDIT-2026-11-01.md`](docs/research/ALEA-LOCAL-AUDIT-2026-11-01.md)
+- **Investigación de Jondo.Unity.WebClient:** [`docs/research/JONDO-WEBCLIENT-RESEARCH.md`](docs/research/JONDO-WEBCLIENT-RESEARCH.md)
 
 La carpeta `docs/research/` conserva la arquitectura propuesta, el diseño de
 combate, movimiento, chat, inventario, mundo, personajes, mapas y entidades,
