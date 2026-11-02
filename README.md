@@ -115,6 +115,12 @@ npm run dev
 - **DreamFus UI Specification:** `dreamfus-ui/docs/` (submodule)
 - **Protocolo Jondo:** `docs/unknown-packets.md`
 - **UI CLIENTE:** `docs/UI-CLIENTE.md`
+- **Investigación y diseño del cliente:** [`docs/research/INDEX.md`](docs/research/INDEX.md)
+
+La carpeta `docs/research/` conserva la arquitectura propuesta, el diseño de
+combate, movimiento, chat, inventario, mundo, personajes, mapas y entidades,
+además de referencias públicas y sus restricciones de licencia. Es la guía
+para continuar el cliente sin depender de una conversación anterior.
 
 ---
 
