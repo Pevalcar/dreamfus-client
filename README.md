@@ -116,11 +116,16 @@ npm run dev
 - **Protocolo Jondo:** `docs/unknown-packets.md`
 - **UI CLIENTE:** `docs/UI-CLIENTE.md`
 - **Investigación y diseño del cliente:** [`docs/research/INDEX.md`](docs/research/INDEX.md)
+- **Datos y UI de Alea:** [`docs/research/ALEA-DATA-GUIDE.md`](docs/research/ALEA-DATA-GUIDE.md)
 
 La carpeta `docs/research/` conserva la arquitectura propuesta, el diseño de
 combate, movimiento, chat, inventario, mundo, personajes, mapas y entidades,
 además de referencias públicas y sus restricciones de licencia. Es la guía
 para continuar el cliente sin depender de una conversación anterior.
+
+La instalación local de Alea puede servir para auditar nombres, jerarquías,
+estilos, manifests y metadatos de UI. No es una dependencia del build y sus
+assets no se distribuyen en este repositorio.
 
 ---
 

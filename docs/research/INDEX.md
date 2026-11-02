@@ -39,6 +39,8 @@ servidor.
 | [MOVEMENT-NETWORK-RESEARCH.md](./MOVEMENT-NETWORK-RESEARCH.md) | Navegación isométrica, celdas, rutas, línea de visión y sincronización |
 | [COMBAT-RESEARCH.md](./COMBAT-RESEARCH.md) | Combate táctico, simulación, efectos, turnos y autoridad del servidor |
 | [RESEARCH-METHOD.md](./RESEARCH-METHOD.md) | Cómo verificar afirmaciones, commits, licencias y referencias externas |
+| [ALEA-DATA-GUIDE.md](./ALEA-DATA-GUIDE.md) | Qué catalogar de una instalación local de Alea y cómo convertirlo en componentes propios |
+| [ALEA-AUDIT-OUTPUT.md](./ALEA-AUDIT-OUTPUT.md) | Formato de salida para una auditoría de UI y assets |
 | [AI-HANDOFF.md](./AI-HANDOFF.md) | Procedimiento para que otra IA continúe la investigación y la implementación |
 
 ## Estado de esta investigación
@@ -62,6 +64,9 @@ servidor.
   nombres de proyectos y afirmaciones históricas que todavía no tienen todas
   una fuente primaria fijada. Se conserva como hipótesis de investigación,
   no como especificación del protocolo.
+- La instalación de Alea se usa solo como referencia local. El build de
+  DreamFus debe funcionar sin ella y no se versionan sus imágenes, fuentes,
+  sonidos, bundles, mapas ni binarios.
 
 ## Regla de reutilización
 
