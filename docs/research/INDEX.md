@@ -36,6 +36,9 @@ servidor.
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Estructura recomendada, límites entre módulos, estado y transporte |
 | [GAME-SYSTEMS.md](./GAME-SYSTEMS.md) | Diseño de combate, movimiento, chat, inventario, mundo, personajes, mapas y entidades |
 | [REFERENCES.md](./REFERENCES.md) | Proyectos públicos, enlaces, licencias, utilidad y reglas para reutilizar código |
+| [MOVEMENT-NETWORK-RESEARCH.md](./MOVEMENT-NETWORK-RESEARCH.md) | Navegación isométrica, celdas, rutas, línea de visión y sincronización |
+| [COMBAT-RESEARCH.md](./COMBAT-RESEARCH.md) | Combate táctico, simulación, efectos, turnos y autoridad del servidor |
+| [RESEARCH-METHOD.md](./RESEARCH-METHOD.md) | Cómo verificar afirmaciones, commits, licencias y referencias externas |
 | [AI-HANDOFF.md](./AI-HANDOFF.md) | Procedimiento para que otra IA continúe la investigación y la implementación |
 
 ## Estado de esta investigación
@@ -55,6 +58,10 @@ servidor.
 - Las afirmaciones sobre proyectos externos deben verificarse en el commit
   concreto que se vaya a estudiar. Un repositorio puede cambiar de licencia,
   rama o contenido.
+- El documento adjunto usado como investigación inicial mezcla observaciones,
+  nombres de proyectos y afirmaciones históricas que todavía no tienen todas
+  una fuente primaria fijada. Se conserva como hipótesis de investigación,
+  no como especificación del protocolo.
 
 ## Regla de reutilización
 
