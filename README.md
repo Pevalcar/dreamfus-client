@@ -88,52 +88,76 @@ sequenceDiagram
 
 ---
 
-## 🎨 Desarrollo
+## 📊 Estado de Implementación
 
-### Setup Local
+### ✅ Implementado (Functional)
 
-```bash
-# 1. Tener Alea instalado (para assets reales)
-# 2. Ir al cliente
-cd dreamfus-client/frontend
-npm install
-npm run dev
+| Componente | Archivo | Estado |
+|------------|---------|--------|
+| **Protocolo WebSocket** | `src/lib.rs` | ✅ Completado - Frame parsing con VarInt, envelope building |
+| **Auto-conexión** | `frontend/src/main.js` | ✅ Completado - Mock mode con personajes de prueba |
+| **EventBus centralizado** | `frontend/src/EventBus.js` | ✅ Completado - Sistema de eventos con subscribe/unsubscribe |
+| **DFUI Renderer** | `frontend/src/dfui/index.js` | ✅ Completado - Componentes WindowFigma, DofusLabel, etc. |
+| **Character Select Screen** | `frontend/src/ui/screens/characterSelect.js` | ✅ Completado - Manejo de lista de personajes |
+| **UI Manager** | `frontend/src/ui/UIManager.js` | ✅ Completado - Carga de screens y manejo de mensajes |
+| **Server Messages** | `frontend/src/main.js` (mocks) | ✅ Completado - Mensaje welcome, charactersList |
+
+### 🚧 En Desarrollo / Pendiente
+
+| Componente | Archivo/Sujeto | Estado | Notas |
+|------------|----------------|--------|-------|
+| **Tauri Backend Integration** | `src/lib.rs` | 🚧 Parcial | Necesita WebSocket en lugar de TCP directo |
+| **Asset Catalog** | `src/lib.rs` | ❌ No implementado | Para cargar assets de Alea |
+| **Login Screen** | `frontend/src/ui/screens/login.js` | 🚧 Fallback | Solo como pantalla de respaldo |
+| **Main Menu** | `frontend/src/ui/screens/mainMenu.js` | ❌ No conectado | Necesita handlers reales |
+| **Friends Screen** | `frontend/src/ui/screens/friends.js` | ❌ Básico | Mock mode solo |
+| **DFUI Components** | `frontend/src/dfui/components/` | ❌ Parcial | Solo definición estática |
+| **WebSocket 4-byte framing** | `src/lib.rs` | ❌ Pendiente | Para puerto 5557 (auth) vs 5555 (juego) |
+
+### 🧪 Arquitectura Tauri/Vite Actual
+
+```
+DofusClient/
+├── src/                    # Rust backend (TCP bridge)
+│   └── lib.rs             # Servidor de conexión TCP
+├── src-tauri/             # Tauri configuration
+│   └── main.rs            # Punto de entrada Tauri
+├── frontend/              # Vite frontend
+│   ├── main.js           # ✅ Auto-conexión y mock flow
+│   ├── protocol.js       # ✅ WebSocket + Mock mode
+│   ├── EventBus.js       # ✅ Sistema de eventos
+│   ├── dfui/             # ✅ Motor DFUI parcial
+│   │   └── index.js
+│   └── ui/
+│       ├── UIManager.js   # ✅ Gestor de screens
+│       └── screens/      # 🚧 Pantallas principales
+│           ├── characterSelect.js  # ✅ Conectado
+│           ├── login.js             # ⚠️ Fallback
+│           ├── mainMenu.js          # ⚠️ Mock
+│           └── friends.js           # ⚠️ Mock
+├── public/ui/            # DFUI templates
+│   ├── characterSelect.dfui
+│   └── friends.dfui
+├── tauri.conf.json
+└── package.json
 ```
 
-### Auto-Conexión Demo
+### 🔧 Flujo Actual (Mock Mode)
 
-```bash
-# Ver en: http://localhost:1420
-# Sin login screen - va directo a characterSelect
-# Usa assets de Alea (placeholder temporal)
+```
+main.js
+  ├─> UIManager.loadUI('characterSelect')
+  ├─> Protocol.connect() → Mock (WebSocket TCP falla)
+  ├─> Protocol.sendMockLoginFlow()
+  └─> EventBus emite 'charactersList' → CharacterSelect.render()
 ```
 
----
+### 📋 Próximos Pasos
 
-## 📚 Referencias
-
-- **DreamFus UI Specification:** `dreamfus-ui/docs/` (submodule)
-- **Protocolo Jondo:** `docs/unknown-packets.md`
-- **UI CLIENTE:** `docs/UI-CLIENTE.md`
-- **Investigación y diseño del cliente:** [`docs/research/INDEX.md`](docs/research/INDEX.md)
-- **Datos y UI de Alea:** [`docs/research/ALEA-DATA-GUIDE.md`](docs/research/ALEA-DATA-GUIDE.md)
-- **Auditoría local de Alea:** [`docs/research/ALEA-LOCAL-AUDIT-2026-11-01.md`](docs/research/ALEA-LOCAL-AUDIT-2026-11-01.md)
-- **Investigación de Jondo.Unity.WebClient:** [`docs/research/JONDO-WEBCLIENT-RESEARCH.md`](docs/research/JONDO-WEBCLIENT-RESEARCH.md)
-
-La carpeta `docs/research/` conserva la arquitectura propuesta, el diseño de
-combate, movimiento, chat, inventario, mundo, personajes, mapas y entidades,
-además de referencias públicas y sus restricciones de licencia. Es la guía
-para continuar el cliente sin depender de una conversación anterior.
-
-La instalación local autorizada de Alea puede usarse como proveedor de recursos
-en desarrollo y pruebas. El contrato de resolución, las carpetas esperadas, el
-aislamiento del servidor y el flujo para el launcher están documentados en
-[`docs/research/LOCAL-ALEA-RUNTIME.md`](docs/research/LOCAL-ALEA-RUNTIME.md).
-La conexión runtime todavía debe implementarse mediante un `AssetCatalog` de
-Tauri/Rust; actualmente las pantallas usan los fixtures incluidos en
-`frontend/public`.
-
----
+1. **WebSocket Authentication** - Implementar en `src/lib.rs` para puerto 5557
+2. **Asset Catalog** - Sistema de resolución de paths Alea
+3. **Real Connection Flow** - Integración con Tauri invoke para producción
+4. **UI Screen Handlers** - Conectar login y mainMenu con handlers reales
 
 ## ⚠️ Notas de Assets
 
