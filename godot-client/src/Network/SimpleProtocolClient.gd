@@ -1,13 +1,29 @@
-extends Node
 class_name SimpleProtocolClient
-
-enum ClientState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
+extends Node
 
 signal connection_state_changed(connected: bool)
 signal message_received(message_type: String, payload: Dictionary)
 signal error_received(error: String, details: String)
-signal auth_response_received(success: bool, account_id: int, servers_json: Dictionary, error: String)
-signal server_selection_response_received(success: bool, ticket: String, host: String, ports: Array, error: String)
+signal auth_response_received(
+	success: bool,
+	account_id: int,
+	servers_json: Dictionary,
+	error: String,
+)
+signal server_selection_response_received(
+	success: bool,
+	ticket: String,
+	host: String,
+	ports: Array,
+	error: String,
+)
+
+enum ClientState {
+	DISCONNECTED,
+	CONNECTING,
+	CONNECTED,
+	ERROR,
+}
 
 @export var host: String = "127.0.0.1"
 @export var port: int = 5557
@@ -18,6 +34,7 @@ var _websocket: WebSocketPeer = null
 var _buffer: PackedByteArray = PackedByteArray()
 var _pending_connections: Array[Callable] = []
 
+
 func _ready() -> void:
 	print("[SimpleProtocolClient] Inicializado")
 	_websocket = WebSocketPeer.new()
@@ -25,33 +42,37 @@ func _ready() -> void:
 	_websocket.connection_closed.connect(_on_connection_closed)
 	_websocket.data_received.connect(_on_data_received_signal)
 
+
 func _process(delta: float) -> void:
 	if _websocket == null:
 		return
 	_websocket.poll()
 
-func connect_to_server(host: String, port: int) -> void:
+
+func connect_to_server(target_host: String, target_port: int) -> void:
 	if state == ClientState.CONNECTED:
-		emit_signal("connection_state_changed", true)
+		connection_state_changed.emit(true)
 		return
 
-	self.host = host
-	self.port = port
+	self.host = target_host
+	self.port = target_port
 	state = ClientState.CONNECTING
-	emit_signal("connection_state_changed", false)
+	connection_state_changed.emit(false)
 
 	var url: String = "ws://%s:%d" % [host, port]
 	var err := _websocket.connect_to_url(url)
 	if err != OK:
 		state = ClientState.ERROR
-		emit_signal("connection_state_changed", false)
-		emit_signal("error_received", "WS_CONNECT", "Error al conectar WebSocket: %d" % err)
+		connection_state_changed.emit(false)
+		error_received.emit("WS_CONNECT", "Error al conectar WebSocket: %d" % err)
+
 
 func disconnect_from_server() -> void:
 	if _websocket != null and state == ClientState.CONNECTED:
 		_websocket.close()
 	_buffer.clear()
 	state = ClientState.DISCONNECTED
+
 
 func send_message(message_type: String, payload: Dictionary) -> void:
 	if state != ClientState.CONNECTED:
@@ -79,38 +100,38 @@ func send_message(message_type: String, payload: Dictionary) -> void:
 	if err != OK:
 		printerr("[SimpleProtocolClient] Error enviando paquete: %d" % err)
 
+
 func send_auth_request(lang: String, token: String, install_id: String) -> void:
-	var payload = {
-		"type": "auth_request",
-		"lang": lang,
-		"token": token,
-		"installId": install_id
-	}
+	var payload = { "type": "auth_request", "lang": lang, "token": token, "installId": install_id }
 	send_message("auth_request", payload)
+
 
 func send_server_selection(server_id: int, account_id: int, lang: String) -> void:
 	var payload = {
 		"type": "server_selection",
 		"server_id": server_id,
 		"account_id": account_id,
-		"lang": lang
+		"lang": lang,
 	}
 	send_message("server_selection", payload)
 
+
 func _on_connection_established() -> void:
 	state = ClientState.CONNECTED
-	emit_signal("connection_state_changed", true)
+	connection_state_changed.emit(true)
 	for pending_cb in _pending_connections:
 		if pending_cb.is_valid():
 			pending_cb.call()
 	_pending_connections.clear()
 	print("[SimpleProtocolClient] Conexión establecida")
 
+
 func _on_connection_closed(code: int = 0, reason: String = "") -> void:
 	if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
 		state = ClientState.DISCONNECTED
-		emit_signal("connection_state_changed", false)
+		connection_state_changed.emit(false)
 	print("[SimpleProtocolClient] Conexión cerrada: %s" % reason)
+
 
 func _on_data_received_signal() -> void:
 	if state != ClientState.CONNECTED:
@@ -120,6 +141,7 @@ func _on_data_received_signal() -> void:
 		var packet: PackedByteArray = _websocket.get_packet()
 		_buffer.append_array(packet)
 		_process_buffer()
+
 
 func _process_buffer() -> void:
 	# Necesitamos al menos 4 bytes para leer el largo
@@ -144,7 +166,7 @@ func _process_buffer() -> void:
 	var json := JSON.new()
 	var parse_result := json.parse(json_str)
 	if parse_result != Error.OK:
-		emit_signal("error_received", "JSON_PARSE", "Error parseando JSON: %d" % parse_result)
+		error_received.emit("JSON_PARSE", "Error parseando JSON: %d" % parse_result)
 		return
 
 	var payload: Variant = json.get_data()
@@ -155,24 +177,24 @@ func _process_buffer() -> void:
 
 	# Emitir señales específicas según el tipo de mensaje
 	if msg_type == "auth_response":
-		emit_signal("auth_response_received",
+		auth_response_received.emit(
 			payload.get("success", false),
 			payload.get("account_id", 0),
-			payload.get("servers", {}),
-			payload.get("error", "")
+			payload.get("servers", { }),
+			payload.get("error", ""),
 		)
 	elif msg_type == "server_selection_response":
-		emit_signal("server_selection_response_received",
+		server_selection_response_received.emit(
 			payload.get("success", false),
 			payload.get("ticket", ""),
 			payload.get("host", ""),
 			payload.get("ports", []),
-			payload.get("error", "")
+			payload.get("error", ""),
 		)
 	elif msg_type == "error":
-		emit_signal("error_received",
+		error_received.emit(
 			payload.get("code", "UNKNOWN_ERROR"),
-			payload.get("message", "Error desconocido")
+			payload.get("message", "Error desconocido"),
 		)
 
-	emit_signal("message_received", msg_type, payload)
+	message_received.emit(msg_type, payload)

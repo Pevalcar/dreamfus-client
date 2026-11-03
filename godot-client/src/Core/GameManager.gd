@@ -16,7 +16,7 @@ enum GameState {
 	PLAYER_LOGIN = 1,
 	CHARACTER_SELECT = 2,
 	IN_GAME = 3,
-	ERROR = 4
+	ERROR = 4,
 }
 
 # Singleton
@@ -57,7 +57,7 @@ func _ready() -> void:
 func initialize(proto_client: SimpleProtocolClient) -> void:
 	_proto_client = proto_client
 
-	# Conectar señales del cliente usando el nuevo nombre de métodos
+	# Conectar señales del cliente
 	proto_client.connection_state_changed.connect(_on_connection_state_changed)
 	proto_client.auth_response_received.connect(_on_auth_response_received)
 	proto_client.server_selection_response_received.connect(_on_server_selection_response_received)
@@ -69,7 +69,7 @@ func change_state(new_state: GameState) -> void:
 
 	print("[GameManager] Cambio de estado: %s -> %s" % [_current_state, new_state])
 	_current_state = new_state
-	emit_signal("game_state_changed", new_state)
+	game_state_changed.emit(new_state)
 
 # ============================================================
 # AUTENTICACIÓN
@@ -89,7 +89,7 @@ func attempt_login(lang: String, token: String, install_id: String) -> void:
 		await get_tree().process_frame
 
 	if _proto_client.state != SimpleProtocolClient.ClientState.CONNECTED:
-		emit_signal("error_received", "CONNECTION_ERROR", "No se pudo conectar al servidor")
+		error_received.emit("CONNECTION_ERROR", "No se pudo conectar al servidor")
 		change_state(GameState.ERROR)
 		return
 
@@ -110,7 +110,7 @@ func _on_auth_response_received(success: bool, account_id_param: int, servers_js
 			available_servers.append(server)
 
 		print("[GameManager] Auth exitoso. AccountId: %d" % account_id)
-		emit_signal("auth_completed", account_id, JSON.stringify(servers_json))
+		auth_completed.emit(account_id, JSON.stringify(servers_json))
 
 		# Seleccionar primer servidor disponible
 		if available_servers.size() > 0:
@@ -157,7 +157,7 @@ func _on_server_selection_response_received(success: bool, ticket: String, host:
 		change_state(GameState.IN_GAME)
 	else:
 		printerr("[GameManager] Error selección servidor: %s" % error)
-		emit_signal("error_received", "SERVER_SELECT_ERROR", error)
+		error_received.emit("SERVER_SELECT_ERROR", error)
 		change_state(GameState.ERROR)
 
 func _on_connection_state_changed(connected: bool) -> void:
@@ -166,7 +166,7 @@ func _on_connection_state_changed(connected: bool) -> void:
 
 func _on_error_received(error: String, details: String) -> void:
 	printerr("[GameManager] Error: %s - %s" % [error, details])
-	emit_signal("error_received", error, details)
+	error_received.emit(error, details)
 	if error != "AUTH_ERROR":
 		change_state(GameState.ERROR)
 
@@ -181,7 +181,7 @@ func select_character(character: CharacterData) -> void:
 	print("[GameManager] Personaje seleccionado: %s" % character.name)
 	selected_character = character
 
-	emit_signal("character_selected", character.id, character.name)
+	character_selected.emit(character.id, character.name)
 	change_state(GameState.IN_GAME)
 
 func parse_character_from_json(json_str: String) -> CharacterData:
