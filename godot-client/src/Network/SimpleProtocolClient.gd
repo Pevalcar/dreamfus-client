@@ -28,7 +28,6 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _websocket == null:
 		return
-
 	_websocket.poll()
 
 func connect_to_server(host: String, port: int) -> void:
