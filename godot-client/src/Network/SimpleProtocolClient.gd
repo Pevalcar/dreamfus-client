@@ -2,7 +2,6 @@ extends Node
 class_name SimpleProtocolClient
 
 enum ClientState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
-enum WsState { DISCONNECTED = 0, CONNECTING = 1, CONNECTED = 2, CLOSING = 3, CLOSED = 4 }
 
 signal connection_state_changed(connected: bool)
 signal message_received(message_type: String, payload: Dictionary)
@@ -22,26 +21,15 @@ var _pending_connections: Array[Callable] = []
 func _ready() -> void:
 	print("[SimpleProtocolClient] Inicializado")
 	_websocket = WebSocketPeer.new()
+	_websocket.connection_established.connect(_on_connection_established)
+	_websocket.connection_closed.connect(_on_connection_closed)
+	_websocket.data_received.connect(_on_data_received_signal)
 
 func _process(delta: float) -> void:
 	if _websocket == null:
 		return
 
 	_websocket.poll()
-
-	var ws_state: int = _websocket.get_connection_state()
-	if ws_state == WsState.CONNECTED:
-		if state != ClientState.CONNECTED:
-			state = ClientState.CONNECTED
-			emit_signal("connection_state_changed", true)
-			for pending_cb in _pending_connections:
-				if pending_cb.is_valid():
-					pending_cb.call()
-			_pending_connections.clear()
-	elif ws_state == WsState.CLOSING or ws_state == WsState.CLOSED:
-		if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
-			state = ClientState.DISCONNECTED
-			emit_signal("connection_state_changed", false)
 
 func connect_to_server(host: String, port: int) -> void:
 	if state == ClientState.CONNECTED:
@@ -61,7 +49,7 @@ func connect_to_server(host: String, port: int) -> void:
 		emit_signal("error_received", "WS_CONNECT", "Error al conectar WebSocket: %d" % err)
 
 func disconnect_from_server() -> void:
-	if _websocket != null and _websocket.get_connection_state() == WsState.CONNECTED:
+	if _websocket != null and state == ClientState.CONNECTED:
 		_websocket.close()
 	_buffer.clear()
 	state = ClientState.DISCONNECTED
@@ -110,8 +98,23 @@ func send_server_selection(server_id: int, account_id: int, lang: String) -> voi
 	}
 	send_message("server_selection", payload)
 
-func _on_data_received() -> void:
-	if _websocket == null or _websocket.get_connection_state() != WsState.CONNECTED:
+func _on_connection_established() -> void:
+	state = ClientState.CONNECTED
+	emit_signal("connection_state_changed", true)
+	for pending_cb in _pending_connections:
+		if pending_cb.is_valid():
+			pending_cb.call()
+	_pending_connections.clear()
+	print("[SimpleProtocolClient] Conexión establecida")
+
+func _on_connection_closed(code: int = 0, reason: String = "") -> void:
+	if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
+		state = ClientState.DISCONNECTED
+		emit_signal("connection_state_changed", false)
+	print("[SimpleProtocolClient] Conexión cerrada: %s" % reason)
+
+func _on_data_received_signal() -> void:
+	if state != ClientState.CONNECTED:
 		return
 
 	while _websocket.get_available_packet_count() > 0:
