@@ -2,6 +2,7 @@ extends Node
 class_name SimpleProtocolClient
 
 enum ClientState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
+enum WsState { DISCONNECTED = 0, CONNECTING = 1, CONNECTED = 2, CLOSING = 3, CLOSED = 4 }
 
 signal connection_state_changed(connected: bool)
 signal message_received(message_type: String, payload: Dictionary)
@@ -28,20 +29,19 @@ func _process(delta: float) -> void:
 
 	_websocket.poll()
 
-	match _websocket.get_connection_state():
-		WebSocketPeer.STATE_CONNECTED:
-			if state != ClientState.CONNECTED:
-				state = ClientState.CONNECTED
-				emit_signal("connection_state_changed", true)
-				# Procesar conexiones pendientes
-				for pending_cb in _pending_connections:
-					if pending_cb.is_valid():
-						pending_cb.call()
-				_pending_connections.clear()
-		WebSocketPeer.STATE_CLOSING, WebSocketPeer.STATE_CLOSED:
-			if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
-				state = ClientState.DISCONNECTED
-				emit_signal("connection_state_changed", false)
+	var ws_state: int = _websocket.get_connection_state()
+	if ws_state == WsState.CONNECTED:
+		if state != ClientState.CONNECTED:
+			state = ClientState.CONNECTED
+			emit_signal("connection_state_changed", true)
+			for pending_cb in _pending_connections:
+				if pending_cb.is_valid():
+					pending_cb.call()
+			_pending_connections.clear()
+	elif ws_state == WsState.CLOSING or ws_state == WsState.CLOSED:
+		if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
+			state = ClientState.DISCONNECTED
+			emit_signal("connection_state_changed", false)
 
 func connect_to_server(host: String, port: int) -> void:
 	if state == ClientState.CONNECTED:
@@ -61,7 +61,7 @@ func connect_to_server(host: String, port: int) -> void:
 		emit_signal("error_received", "WS_CONNECT", "Error al conectar WebSocket: %d" % err)
 
 func disconnect_from_server() -> void:
-	if _websocket != null and _websocket.get_connection_state() == WebSocketPeer.STATE_CONNECTED:
+	if _websocket != null and _websocket.get_connection_state() == WsState.CONNECTED:
 		_websocket.close()
 	_buffer.clear()
 	state = ClientState.DISCONNECTED
@@ -111,7 +111,7 @@ func send_server_selection(server_id: int, account_id: int, lang: String) -> voi
 	send_message("server_selection", payload)
 
 func _on_data_received() -> void:
-	if _websocket == null or _websocket.get_connection_state() != WebSocketPeer.STATE_CONNECTED:
+	if _websocket == null or _websocket.get_connection_state() != WsState.CONNECTED:
 		return
 
 	while _websocket.get_available_packet_count() > 0:
@@ -138,7 +138,7 @@ func _process_buffer() -> void:
 	# Limpiar el buffer
 	_buffer = _buffer.slice(4 + msg_len)
 
-	# Parsear JSON usando la API de Godot 4.8
+	# Parsear JSON
 	var json := JSON.new()
 	var parse_result := json.parse(json_str)
 	if parse_result != Error.OK:
