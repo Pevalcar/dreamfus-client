@@ -33,20 +33,38 @@ var state: ClientState = ClientState.DISCONNECTED
 var _websocket: WebSocketPeer = null
 var _buffer: PackedByteArray = PackedByteArray()
 var _pending_connections: Array[Callable] = []
+var _last_ws_state: int = 0
 
 
 func _ready() -> void:
 	print("[SimpleProtocolClient] Inicializado")
 	_websocket = WebSocketPeer.new()
-	_websocket.connection_established.connect(_on_connection_established)
-	_websocket.connection_closed.connect(_on_connection_closed)
-	_websocket.data_received.connect(_on_data_received_signal)
+	# Usar conect() con strings para compatibilidad con Godot 4.8 beta2
+	_websocket.connect("connection_established", _on_connection_established)
+	_websocket.connect("connection_closed", _on_connection_closed)
+	_websocket.connect("data_received", _on_data_received_signal)
 
 
 func _process(delta: float) -> void:
 	if _websocket == null:
 		return
 	_websocket.poll()
+	# Monitorear cambios de estado manualmente como fallback
+	var current_state: int = _websocket.get_connection_state()
+	if current_state != _last_ws_state:
+		_last_ws_state = current_state
+		if current_state == 2:  # CONNECTED
+			if state != ClientState.CONNECTED:
+				state = ClientState.CONNECTED
+				connection_state_changed.emit(true)
+				for pending_cb in _pending_connections:
+					if pending_cb.is_valid():
+						pending_cb.call()
+				_pending_connections.clear()
+		elif current_state == 3 or current_state == 4:  # CLOSING or CLOSED
+			if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
+				state = ClientState.DISCONNECTED
+				connection_state_changed.emit(false)
 
 
 func connect_to_server(target_host: String, target_port: int) -> void:
