@@ -25,6 +25,12 @@ enum ClientState {
 	ERROR,
 }
 
+# WebSocketPeer.State values (Godot 4.8 beta2)
+const STATE_CONNECTING: int = 0
+const STATE_OPEN: int = 1
+const STATE_CLOSING: int = 2
+const STATE_CLOSED: int = 3
+
 @export var host: String = "127.0.0.1"
 @export var port: int = 5557
 @export var connection_timeout: float = 10.0
@@ -33,27 +39,22 @@ var state: ClientState = ClientState.DISCONNECTED
 var _websocket: WebSocketPeer = null
 var _buffer: PackedByteArray = PackedByteArray()
 var _pending_connections: Array[Callable] = []
-var _last_ws_state: int = 0
 
 
 func _ready() -> void:
 	print("[SimpleProtocolClient] Inicializado")
 	_websocket = WebSocketPeer.new()
-	# Usar conect() con strings para compatibilidad con Godot 4.8 beta2
-	_websocket.connect("connection_established", _on_connection_established)
-	_websocket.connect("connection_closed", _on_connection_closed)
-	_websocket.connect("data_received", _on_data_received_signal)
 
 
 func _process(delta: float) -> void:
 	if _websocket == null:
 		return
 	_websocket.poll()
-	# Monitorear cambios de estado manualmente como fallback
-	var current_state: int = _websocket.get_connection_state()
-	if current_state != _last_ws_state:
-		_last_ws_state = current_state
-		if current_state == 2:  # CONNECTED
+
+	# Polling-based state management (compatible with Godot 4.8 beta2)
+	var ws_state: int = _websocket.get_ready_state()
+	match ws_state:
+		STATE_OPEN:
 			if state != ClientState.CONNECTED:
 				state = ClientState.CONNECTED
 				connection_state_changed.emit(true)
@@ -61,10 +62,23 @@ func _process(delta: float) -> void:
 					if pending_cb.is_valid():
 						pending_cb.call()
 				_pending_connections.clear()
-		elif current_state == 3 or current_state == 4:  # CLOSING or CLOSED
+			# Process any received data
+			_process_received_data()
+		STATE_CLOSING, STATE_CLOSED:
 			if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
 				state = ClientState.DISCONNECTED
 				connection_state_changed.emit(false)
+		_:
+			if state == ClientState.CONNECTING:
+				state = ClientState.DISCONNECTED
+				connection_state_changed.emit(false)
+
+
+func _process_received_data() -> void:
+	while _websocket.get_available_packet_count() > 0:
+		var packet: PackedByteArray = _websocket.get_packet()
+		_buffer.append_array(packet)
+		_process_buffer()
 
 
 func connect_to_server(target_host: String, target_port: int) -> void:
@@ -132,33 +146,6 @@ func send_server_selection(server_id: int, account_id: int, lang: String) -> voi
 		"lang": lang,
 	}
 	send_message("server_selection", payload)
-
-
-func _on_connection_established() -> void:
-	state = ClientState.CONNECTED
-	connection_state_changed.emit(true)
-	for pending_cb in _pending_connections:
-		if pending_cb.is_valid():
-			pending_cb.call()
-	_pending_connections.clear()
-	print("[SimpleProtocolClient] Conexión establecida")
-
-
-func _on_connection_closed(code: int = 0, reason: String = "") -> void:
-	if state == ClientState.CONNECTING or state == ClientState.CONNECTED:
-		state = ClientState.DISCONNECTED
-		connection_state_changed.emit(false)
-	print("[SimpleProtocolClient] Conexión cerrada: %s" % reason)
-
-
-func _on_data_received_signal() -> void:
-	if state != ClientState.CONNECTED:
-		return
-
-	while _websocket.get_available_packet_count() > 0:
-		var packet: PackedByteArray = _websocket.get_packet()
-		_buffer.append_array(packet)
-		_process_buffer()
 
 
 func _process_buffer() -> void:
