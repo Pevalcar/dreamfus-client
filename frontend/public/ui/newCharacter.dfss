@@ -1,0 +1,5 @@
+/* New Character Dialog Styles */
+
+#newCharacterDialog {
+    min-width: 320px;
+}

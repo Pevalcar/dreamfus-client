@@ -1,0 +1,117 @@
+{
+  "t": "DofusVisualElement",
+  "a": { "gap-value": "4" },
+  "c": ["dfui-screen", "flex", "flex-col", "h-full", "w-full"],
+  "s": "background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 20px;",
+  "k": [
+    {
+      "t": "DofusVisualElement",
+      "n": "header",
+      "c": ["flex", "justify-between", "items-center", "p-4"],
+      "s": "border-bottom: 1px solid var(--border-dark);",
+      "k": [
+        {
+          "t": "DofusLabel",
+          "n": "title",
+          "a": { "tabindex": "-1", "text": "DreamFus" },
+          "c": ["font-title", "text-gold"],
+          "s": "font-size: 32px; text-shadow: 0 2px 8px rgba(0,0,0,0.5);"
+        },
+        {
+          "t": "DofusVisualElement",
+          "n": "connectionStatus",
+          "c": ["flex", "items-center", "gap-2"],
+          "k": [
+            {
+              "t": "DofusLabel",
+              "n": "statusDot",
+              "a": { "tabindex": "-1", "text": "●" },
+              "c": ["text-success"],
+              "s": "font-size: 12px; animation: pulse 2s infinite;"
+            },
+            {
+              "t": "DofusLabel",
+              "n": "statusText",
+              "a": { "tabindex": "-1", "text": "Conectado" },
+              "c": ["text-white-80"],
+              "s": "font-size: 14px;"
+            },
+            {
+              "t": "DofusButtonCustom",
+              "n": "disconnectBtn",
+              "a": { "text": "Desconectar", "main-style": "secondary", "data-action": "disconnect" },
+              "s": "margin-left: 16px;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "DofusVisualElement",
+      "n": "mainContent",
+      "c": ["flex-1", "flex", "flex-col", "items-center", "justify-center", "p-8"],
+      "k": [
+        {
+          "t": "DofusLabel",
+          "n": "welcome",
+          "a": { "tabindex": "-1", "text": "Bienvenido a DreamFus" },
+          "c": ["font-title", "text-center"],
+          "s": "font-size: 48px; color: var(--text-gold); text-shadow: 0 4px 16px rgba(0,0,0,0.5); margin-bottom: 16px;"
+        },
+        {
+          "t": "DofusLabel",
+          "n": "subtitle",
+          "a": { "tabindex": "-1", "text": "Cliente para servidor Jondo/DreamFus" },
+          "c": ["text-center", "text-white-60"],
+          "s": "font-size: 18px; margin-bottom: 48px;"
+        },
+        {
+          "t": "DofusVisualElement",
+          "n": "menuButtons",
+          "c": ["flex", "flex-col", "gap-4", "w-full", "max-w-md"],
+          "k": [
+            {
+              "t": "DofusButtonCustom",
+              "n": "btnPlay",
+              "a": { "text": "JUGAR", "main-style": "primary", "data-action": "load-ui", "data-target": "characterSelect" },
+              "s": "font-size: 18px; padding: 18px 32px;"
+            },
+            {
+              "t": "DofusButtonCustom",
+              "n": "btnOptions",
+              "a": { "text": "OPCIONES", "main-style": "secondary", "data-action": "load-ui", "data-target": "options" },
+              "s": "font-size: 16px; padding: 14px 32px;"
+            },
+            {
+              "t": "DofusButtonCustom",
+              "n": "btnSocial",
+              "a": { "text": "AMIGOS", "main-style": "secondary", "data-action": "load-ui", "data-target": "friends" },
+              "s": "font-size: 16px; padding: 14px 32px;"
+            },
+            {
+              "t": "DofusButtonCustom",
+              "n": "btnProtocol",
+              "a": { "text": "TEST PROTOCOLO", "main-style": "secondary", "data-action": "load-ui", "data-target": "protocolTest" },
+              "s": "font-size: 14px; padding: 12px 32px; margin-top: 16px; opacity: 0.7;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "DofusVisualElement",
+      "n": "footer",
+      "c": ["flex", "justify-center", "items-center", "gap-4", "p-4"],
+      "s": "border-top: 1px solid var(--border-dark); opacity: 0.5;",
+      "k": [
+        {
+          "t": "DofusLabel",
+          "n": "version",
+          "a": { "tabindex": "-1", "text": "v0.1.0 - Dofus 3.6.10.11" },
+          "c": ["text-white-40"],
+          "s": "font-size: 12px;"
+        }
+      ]
+    }
+  ]
+}

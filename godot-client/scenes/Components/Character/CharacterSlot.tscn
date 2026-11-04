@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://buc7isx7s1hjh"]
+
+[ext_resource type="Script" uid="uid://b5u6se3a52ire" path="res://src/Components/Character/CharacterSlot.gd" id="1_oqs8o"]
+
+[node name="CharacterSlot" type="Button" unique_id=1115544803]
+custom_minimum_size = Vector2(64, 64)
+offset_right = 64.0
+offset_bottom = 64.0
+script = ExtResource("1_oqs8o")
+
+[node name="CharacterVisual" type="HBoxContainer" parent="." unique_id=173574679]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 0
+offset_right = 64.0
+offset_bottom = 64.0
+
+[node name="IconContainer" type="TextureRect" parent="CharacterVisual" unique_id=1716664036]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+expand_mode = 2
+stretch_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CharacterVisual" unique_id=2096136097]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="CharacterVisual/VBoxContainer" unique_id=1880432687]
+layout_mode = 2
+text = "Nombre del personaje"
+
+[node name="BreedLabel" type="Label" parent="CharacterVisual/VBoxContainer" unique_id=2022217823]
+layout_mode = 2
+text = "\"[Raza]\" "
+
+[node name="LevelLabel" type="Label" parent="CharacterVisual/VBoxContainer" unique_id=1569540780]
+layout_mode = 2
+text = "\"Nivel 1\""
+
+[node name="ArrowIndicator" type="TextureRect" parent="." unique_id=1383832073]
+layout_mode = 0
+offset_left = 245.0
+offset_right = 245.0
+offset_bottom = 77.0

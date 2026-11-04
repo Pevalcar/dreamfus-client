@@ -1,0 +1,8 @@
+{
+  "assetRoot": "",
+  "serverRoot": "",
+  "serverExecutable": "",
+  "serverArguments": [],
+  "serverPort": 5555,
+  "mode": "local-reference"
+}

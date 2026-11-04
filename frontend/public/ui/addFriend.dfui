@@ -1,0 +1,54 @@
+{
+  "t": "WindowFigma",
+  "a": {
+    "is-modal": "true",
+    "is-movable": "true",
+    "has-shadow": "true",
+    "title": "Agregar Amigo"
+  },
+  "s": "width: 400px; height: 250px; max-width: 90vw; max-height: 90vh;",
+  "k": [
+    {
+      "t": "DofusVisualElement",
+      "n": "content",
+      "a": { "gap-value": "4" },
+      "c": ["dfui-window-content", "flex", "flex-col", "p-4", "gap-3"],
+      "k": [
+        {
+          "t": "Label",
+          "n": "title",
+          "a": { "tabindex": "-1", "text": "Agregar nuevo amigo" },
+          "c": ["font-title", "text-center"],
+          "s": "font-size: 18px; color: var(--text-gold); margin-bottom: 8px;"
+        },
+        {
+          "t": "TextInput",
+          "n": "playerNameInput",
+          "a": { 
+            "placeholder": "Nombre de jugador",
+            "autocomplete": "off"
+          },
+          "s": "font-size: 14px; padding: 8px 12px;"
+        },
+        {
+          "t": "DofusButtonCustom",
+          "n": "btnAddFriend",
+          "a": { 
+            "text": "Agregar", 
+            "main-style": "primary" 
+          },
+          "s": "margin-top: 8px; font-size: 14px; padding: 10px 20px;"
+        },
+        {
+          "t": "DofusButtonCustom",
+          "n": "btnCancel",
+          "a": { 
+            "text": "Cancelar", 
+            "main-style": "secondary" 
+          },
+          "s": "font-size: 14px; padding: 10px 20px;"
+        }
+      ]
+    }
+  ]
+}
