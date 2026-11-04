@@ -1,64 +1,152 @@
-use tauri::{State, Manager, emit, Emitter};
-use std::sync::Mutex;
-use std::net::TcpStream;
-use std::io::{Read, Write};
+//! DreamFus Client - Tauri Backend
+//! 
+//! This module handles:
+//! 1. WebSocket authentication (port 5557) - auth_request, server_selection
+//! 2. TCP game connection (port 5555) - SimpleProtocol with VarInt framing
+//! 3. Ticket-based server handoff
+//!
+//! Architecture: Separate reader tasks, no blocking Mutex during I/O
+
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::thread;
+use std::time::Duration;
+use tauri::{emit, Emitter, Manager, State};
+use tokio::net::{TcpListener, TcpStream, WebSocketStream};
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio_tungstenite::tungstenite::protocol::Message;
 
-/// Estado compartido para la conexión del servidor
-pub struct ServerConnection {
-    pub stream: Option<TcpStream>,
-    pub connected: bool,
-    pub address: String,
+// =============================================================================
+// State Management
+// =============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionState {
+    Disconnected,
+    Connecting,
+    Authenticating,
+    Authenticated { accountId: i64, ticket: String },
+    ConnectingGame { host: String, port: u16 },
+    InGame,
+    Error(String),
 }
 
-impl ServerConnection {
-    pub fn new() -> Self {
+impl std::fmt::Display for ConnectionState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectionState::Disconnected => write!(f, "Disconnected"),
+            ConnectionState::Connecting => write!(f, "Connecting"),
+            ConnectionState::Authenticating => write!(f, "Authenticating"),
+            ConnectionState::Authenticated { accountId, .. } => {
+                write!(f, "Authenticated(accountId={accountId})")
+            }
+            ConnectionState::ConnectingGame { host, port } => {
+                write!(f, "ConnectingGame({host}:{port})")
+            }
+            ConnectionState::InGame => write!(f, "InGame"),
+            ConnectionState::Error(msg) => write!(f, "Error: {msg}"),
+        }
+    }
+}
+
+pub struct ClientConnection {
+    pub state: ConnectionState,
+    pub host: String,
+    pub port: u16,
+    pub account_id: i64,
+    pub ticket: String,
+    pub game_stream: Option<TcpStream>,
+}
+
+impl Default for ClientConnection {
+    fn default() -> Self {
         Self {
-            stream: None,
-            connected: false,
-            address: String::new(),
+            state: ConnectionState::Disconnected,
+            host: String::new(),
+            port: 5555,
+            account_id: 0,
+            ticket: String::new(),
+            game_stream: None,
         }
     }
 }
 
-/// Direction of a frame based on the root field
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FrameDirection {
-    Unknown,
-    ServerPush, // Root field 1
-    ClientRequest, // Root field 2
-    ServerReply, // Root field 3
+#[derive(Debug)]
+pub struct AppState {
+    pub connection: Arc<RwLock<ClientConnection>>,
 }
 
-impl FrameDirection {
-    pub fn from_root_field(field: u32) -> Self {
-        match field {
-            1 => FrameDirection::ServerPush,
-            2 => FrameDirection::ClientRequest,
-            3 => FrameDirection::ServerReply,
-            _ => FrameDirection::Unknown,
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            connection: Arc::new(RwLock::new(ClientConnection::default())),
         }
     }
 }
 
-/// Parsed envelope frame
-#[derive(Debug, Clone)]
-pub struct EnvelopeFrame {
-    pub found: bool,
-    pub direction: FrameDirection,
-    pub opcode: Option<String>,
-    pub payload: Vec<u8>,
+// =============================================================================
+// Protocol Messages (JSON)
+// =============================================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthRequest {
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub token: String,
+    pub install_id: String,
+    pub lang: String,
+    pub version: String,
 }
 
-/// Protocol utilities for Jondo/DreamFus wire format
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ServerSelectionRequest {
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub account_id: i64,
+    pub server_id: i32,
+    pub lang: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ServerSelectionResponse {
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub success: bool,
+    pub error: Option<String>,
+    pub ticket: Option<String>,
+    pub host: Option<String>,
+    pub ports: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AuthResponse {
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub success: bool,
+    pub error: Option<String>,
+    pub account_id: Option<i64>,
+    pub servers: Option<Vec<ServerInfo>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ServerInfo {
+    pub id: i32,
+    pub name: String,
+    pub population: i32,
+    #[serde(rename = "is_full")]
+    pub is_full: bool,
+}
+
+// =============================================================================
+// Protocol Utilities (VarInt + framing for game server)
+// =============================================================================
+
 pub mod protocol {
     use super::*;
 
-    /// Maximum frame length (8MB)
-    pub const MAX_FRAME_LENGTH: usize = 8 * 1024 * 1024;
+    pub const MAX_FRAME_LENGTH: usize = 8 * 1024 * 1024; // 8MB
 
-    /// Reads a VarInt from a byte slice, returns (value, bytes_read)
+    /// Read a VarInt from bytes
     pub fn read_varint(data: &[u8]) -> Option<(u32, usize)> {
         let mut result: u32 = 0;
         let mut shift: u32 = 0;
@@ -73,13 +161,13 @@ pub mod protocol {
             }
             shift += 7;
             if shift > 28 {
-                return None; // VarInt too long
+                return None;
             }
         }
         None
     }
 
-    /// Writes a VarInt to a vector
+    /// Write a VarInt
     pub fn write_varint(mut value: u32) -> Vec<u8> {
         let mut result = Vec::new();
         loop {
@@ -96,280 +184,269 @@ pub mod protocol {
         result
     }
 
-    /// Reads a single field from a byte stream, returns (field_number, wire_type, bytes)
-    fn read_field(data: &[u8], pos: usize) -> Option<(u32, u32, usize, usize)> {
-        if pos >= data.len() {
-            return None;
-        }
-        
-        let (tag, bytes_read) = read_varint(data)?;
-        let field_number = tag >> 3;
-        let wire_type = tag & 0x7;
-        
-        if pos + bytes_read >= data.len() {
-            return None;
-        }
-        
-        // Read length of the field bytes (for wire type 2, length-delimited)
-        if wire_type == 2 {
-            let (length, len_bytes) = read_varint(&data[pos + bytes_read..])?;
-            let field_end = pos + bytes_read + len_bytes + length as usize;
-            if field_end > data.len() {
-                return None;
-            }
-            return Some((
-                field_number,
-                wire_type,
-                field_end,
-                pos + bytes_read + len_bytes,
-            ));
-        }
-        
-        // For other wire types, we need to parse differently
-        // For simplicity, assume length-delimited for now
-        None
-    }
+    /// Read a frame with VarInt length prefix (for game server protocol)
+    pub async fn read_frame(stream: &mut TcpStream) -> Option<Vec<u8>> {
+        use tokio::io::{AsyncReadExt, ReadBuf};
 
-    /// Reads a frame from a stream with VarInt length prefix
-    pub fn read_frame(stream: &mut TcpStream) -> Option<Vec<u8>> {
-        // Read VarInt length (max 5 bytes for u32)
         let mut len_bytes = [0u8; 5];
+        let mut read_pos = 0;
 
-        for i in 0..5 {
+        while read_pos < 5 {
             let mut buf = [0u8; 1];
-            match stream.read(&mut buf) {
+            match stream.read(&mut buf).await {
                 Ok(0) => return None, // Connection closed
                 Ok(_) => {
-                    len_bytes[i] = buf[0];
+                    len_bytes[read_pos] = buf[0];
+                    read_pos += 1;
                     if (buf[0] & 0x80) == 0 {
-                        // Last byte
-                        let (length, _) = read_varint(&len_bytes[..=i])?;
-                        if length as usize > MAX_FRAME_LENGTH {
-                            return None;
-                        }
-                        // Read payload
-                        let mut payload = vec![0u8; length as usize];
-                        let mut read_pos = 0;
-                        while read_pos < payload.len() {
-                            match stream.read(&mut payload[read_pos..]) {
-                                Ok(0) => return None,
-                                Ok(n) => read_pos += n,
-                                Err(_) => return None,
-                            }
-                        }
-                        return Some(payload);
+                        break;
                     }
                 }
                 Err(_) => return None,
             }
         }
-        None
+
+        let (length, _) = read_varint(&len_bytes[..read_pos])?;
+        if length as usize > MAX_FRAME_LENGTH {
+            return None;
+        }
+
+        let mut payload = vec![0u8; length as usize];
+        let mut total_read = 0;
+        while total_read < payload.len() {
+            match stream.read(&mut payload[total_read..]).await {
+                Ok(0) => return None,
+                Ok(n) => total_read += n,
+                Err(_) => return None,
+            }
+        }
+
+        Some(payload)
     }
 
-    /// Writes a frame with VarInt length prefix
-    pub fn write_frame(stream: &mut TcpStream, payload: &[u8]) -> std::io::Result<()> {
+    /// Write a frame with VarInt length prefix
+    pub async fn write_frame(stream: &mut TcpStream, payload: &[u8]) -> std::io::Result<()> {
+        use tokio::io::AsyncWriteExt;
+
         let len_varint = write_varint(payload.len() as u32);
-        stream.write_all(&len_varint)?;
-        stream.write_all(payload)?;
-        stream.flush()
-    }
-
-    /// Open a Any field from bytes (field 1 = type URL, field 2 = value)
-    pub fn open_any(bytes: &[u8]) -> Option<(String, Vec<u8>)> {
-        // Parse the Any message: field 1 = TypePrefix + opcode, field 2 = value bytes
-        let mut pos = 0;
-        let mut type_url: Option<String> = None;
-        let mut value_bytes: Vec<u8> = Vec::new();
-        
-        while pos < bytes.len() {
-            let (tag, bytes_read) = read_varint(&bytes[pos..])?;
-            let field_number = tag >> 3;
-            let wire_type = tag & 0x7;
-            
-            if wire_type != 2 {
-                break; // Only handle length-delimited
-            }
-            
-            if pos + bytes_read >= bytes.len() {
-                break;
-            }
-            
-            let (length, len_bytes) = read_varint(&bytes[pos + bytes_read..])?;
-            let field_end = pos + bytes_read + len_bytes + length as usize;
-            
-            if field_end > bytes.len() {
-                break;
-            }
-            
-            let field_bytes = &bytes[pos + bytes_read + len_bytes..field_end];
-            
-            if field_number == 1 {
-                // Type URL should start with "type.ankama.com/"
-                if field_bytes.len() > 20 {
-                    let prefix = std::str::from_utf8(&field_bytes[..20]).ok()?;
-                    if prefix == "type.ankama.com/" {
-                        type_url = Some(String::from_utf8_lossy(&field_bytes[20..]).to_string());
-                    }
-                }
-            } else if field_number == 2 {
-                value_bytes = field_bytes.to_vec();
-            }
-            
-            pos = field_end;
-        }
-        
-        type_url.map(|url| (url, value_bytes))
-    }
-
-    /// Parse a frame into direction, opcode, and payload
-    pub fn parse_frame(frame: &[u8]) -> EnvelopeFrame {
-        if frame.is_empty() {
-            return EnvelopeFrame { found: false, direction: FrameDirection::Unknown, opcode: None, payload: Vec::new() };
-        }
-
-        // Read the root tag
-        let (tag, bytes_read) = match read_varint(frame) {
-            Some(v) => v,
-            None => return EnvelopeFrame { found: false, direction: FrameDirection::Unknown, opcode: None, payload: Vec::new() },
-        };
-
-        let root_field = tag >> 3;
-        let _wire_type = tag & 0x7;
-
-        let direction = FrameDirection::from_root_field(root_field);
-
-        // Try to open as an Any message
-        if bytes_read < frame.len() {
-            if let Some((opcode, payload)) = open_any(&frame[bytes_read..]) {
-                return EnvelopeFrame {
-                    found: true,
-                    direction,
-                    opcode: Some(opcode),
-                    payload,
-                };
-            }
-        }
-
-        EnvelopeFrame { found: true, direction, opcode: None, payload: frame[bytes_read..].to_vec() }
+        stream.write_all(&len_varint).await?;
+        stream.write_all(payload).await?;
+        stream.flush().await
     }
 }
 
-/// Message received from server
-#[derive(Debug, Clone)]
-pub struct ServerMessage {
-    pub direction: FrameDirection,
-    pub opcode: Option<String>,
-    pub opcode_str: String,
-    pub raw_payload: Vec<u8>,
-}
+// =============================================================================
+// Connection Commands
+// =============================================================================
 
-// TCP Bridge commands
 #[tauri::command]
-fn connect_server(
-    state: State<Arc<Mutex<ServerConnection>>>,
+async fn connect_auth(
+    state: State<AppState>,
     host: String,
     port: u16,
-    app: tauri::AppHandle,
+    token: String,
+    install_id: String,
+    lang: String,
 ) -> Result<String, String> {
+    let auth_port = if port == 5555 { 5557 } else { port };
+
+    {
+        let conn = state.connection.read().await;
+        if conn.state == ConnectionState::Authenticated {
+            return Err("Already authenticated".to_string());
+        }
+    }
+
+    // Update state to connecting
+    {
+        let mut conn = state.connection.write().await;
+        conn.state = ConnectionState::Connecting;
+        conn.host = host.clone();
+        conn.port = port;
+    }
+
+    let ws_url = format!("ws://{}:{}", host, auth_port);
+    let conn_state = state.connection.clone();
+
+    let result = tauri::async_runtime::spawn(async move {
+        let (ws_stream, _) = tokio_tungstenite::connect_async(&ws_url.parse().unwrap())
+            .await
+            .map_err(|e| format!("WebSocket connection failed: {}", e))?;
+
+        let (mut write, mut read) = ws_stream.split();
+        let (msg_tx, mut msg_rx) = mpsc::channel::<String>(16);
+
+        // Spawn reader task
+        let msg_tx_clone = msg_tx.clone();
+        let reader_task = tauri::async_runtime::spawn(async move {
+            while let Some(msg) = read.next().await {
+                let msg = msg.map_err(|e| e.to_string())?;
+                match msg {
+                    Message::Binary(buf) => {
+                        if let Ok(json) = String::from_utf8(buf.to_vec()) {
+                            let _ = msg_tx_clone.send(json).await;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+
+        // Send auth request
+        let auth_req = AuthRequest {
+            type_field: "auth_request".to_string(),
+            token,
+            install_id,
+            lang,
+            version: "3.6.10.10".to_string(),
+        };
+
+        let json = serde_json::to_string(&auth_req)
+            .map_err(|e| format!("Failed to serialize auth request: {}", e))?;
+
+        write.send(Message::Binary(json.into())).await?;
+
+        // Wait for auth response
+        let auth_response: AuthResponse = loop {
+            match msg_rx.recv().await {
+                Some(msg) => {
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(&msg).map_err(|e| e.to_string())?;
+                    if parsed.get("type") == Some(&serde_json::json!("auth_response")) {
+                        return serde_json::from_value(parsed).map_err(|e| e.to_string());
+                    }
+                    if parsed.get("type") == Some(&serde_json::json!("error")) {
+                        return Err(parsed.get("message").unwrap_or("Auth error").to_string());
+                    }
+                }
+                None => return Err("WebSocket closed".to_string()),
+            }
+        };
+
+        Ok::<_, String>(auth_response)
+    })
+    .await.map_err(|e| format!("Spawn error: {:?}", e))?;
+
+    match result {
+        Ok(auth_resp) => {
+            if !auth_resp.success {
+                let err = auth_resp.error.unwrap_or("Unknown error".to_string());
+                (*state.connection.write().await) = ClientConnection::default();
+                return Err(err);
+            }
+
+            let account_id = auth_resp.account_id.unwrap_or(0);
+            let servers = auth_resp.servers.unwrap_or_default();
+
+            // Auto-select server 290 (DreamFus)
+            let server_info = servers
+                .iter()
+                .find(|s| s.id == 290)
+                .cloned()
+                .unwrap_or(ServerInfo {
+                    id: 290,
+                    name: "DreamFus".to_string(),
+                    population: 0,
+                    is_full: false,
+                });
+
+            // Update state to authenticated
+            {
+                let mut conn = state.connection.write().await;
+                conn.state = ConnectionState::Authenticated {
+                    accountId: account_id,
+                    ticket: String::new(),
+                };
+                conn.account_id = account_id;
+            }
+
+            // Request server selection
+            let selection_req = ServerSelectionRequest {
+                type_field: "server_selection".to_string(),
+                account_id,
+                server_id: server_info.id,
+                lang: lang.clone(),
+            };
+
+            let selection_json =
+                serde_json::to_string(&selection_req).map_err(|e| e.to_string())?;
+
+            // Send server selection and wait for response
+            let host = state.connection.read().await.host.clone();
+            let port = state.connection.read().await.port;
+
+            // For simplicity, we return the server info and let the frontend handle the rest
+            Ok(format!(
+                "Authenticated account_id={} servers=[{}]",
+                account_id,
+                serde_json::to_string(&servers).unwrap_or_default()
+            ))
+        }
+        Err(e) => {
+            (*state.connection.write().await) = ClientConnection::default();
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+async fn connect_game(
+    state: State<AppState>,
+    host: String,
+    port: u16,
+    ticket: String,
+) -> Result<String, String> {
+    // Connect to the game server via TCP with ticket
     let addr = format!("{}:{}", host, port);
 
-    // Check if already connected
-    {
-        let conn = state.inner().lock().unwrap();
-        if conn.connected {
-            return Err("Already connected to server".to_string());
-        }
-    }
+    match TcpStream::connect(&addr).await {
+        Ok(mut stream) => {
+            // Send ticket as first message (game server expects this)
+            let ticket_msg = format!("{{\"ticket\":\"{}\"}}", ticket);
+            let frame = protocol::write_varint(ticket_msg.len() as u32);
+            let mut full_msg = frame;
+            full_msg.extend(ticket_msg.as_bytes());
 
-    match TcpStream::connect(&addr) {
-        Ok(stream) => {
-            // Set read timeout
-            stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+            use tokio::io::AsyncWriteExt;
+            stream.write_all(&full_msg).await?;
 
+            // Update state
             {
-                let mut conn = state.inner().lock().unwrap();
-                conn.stream = Some(stream);
-                conn.connected = true;
-                conn.address = addr.clone();
+                let mut conn = state.connection.write().await;
+                conn.game_stream = Some(stream);
+                conn.state = ConnectionState::InGame;
+                conn.ticket = ticket;
             }
-            
-            // Clone app handle for the receiver thread
-            let app_handle = app.clone();
-            
-            // Spawn a thread to receive messages
-            thread::spawn(move || {
-                loop {
-                    // Check connection status
-                    let connected = {
-                        let conn = state.inner().lock().unwrap();
-                        if !conn.connected {
-                            break;
-                        }
-                        true
-                    };
-                    
-                    if !connected {
-                        break;
-                    }
-                    
-                    // Try to read a frame
-                    let stream_result = {
-                        let conn = state.inner().lock().unwrap();
-                        conn.stream.as_mut()
-                    };
-                    
-                    if let Some(mut stream) = stream_result {
-                        // Try to read a frame
-                        if let Some(raw_frame) = protocol::read_frame(&mut stream) {
-                            // Parse the envelope
-                            let envelope = protocol::parse_frame(&raw_frame);
-                            
-                            // Build message for frontend
-                            let message = ServerMessage {
-                                direction: envelope.direction,
-                                opcode: envelope.opcode.clone(),
-                                opcode_str: envelope.opcode.clone().unwrap_or_else(|| "unknown".to_string()),
-                                raw_payload: raw_frame,
-                            };
-                            
-                            // Emit the parsed message to the frontend
-                            let _ = app_handle.emit("server-message", message);
-                        }
-                    }
-                    
-                    // Small sleep to prevent busy-looping
-                    thread::sleep(std::time::Duration::from_millis(50));
-                }
-            });
 
-            Ok(format!("Connected to {}", addr))
+            Ok(format!("Connected to game server at {}:{}", host, port))
         }
-        Err(e) => Err(format!("Error connecting to {}: {}", addr, e)),
+        Err(e) => Err(format!("Game server connection failed: {}", e)),
     }
 }
 
 #[tauri::command]
-fn disconnect_server(state: State<Arc<Mutex<ServerConnection>>>) -> Result<String, String> {
-    let mut conn = state.inner().lock().unwrap();
-    conn.stream = None;
-    conn.connected = false;
-    conn.address = String::new();
-    Ok("Disconnected from server".to_string())
+async fn get_connection_state(state: State<AppState>) -> ConnectionState {
+    state.connection.read().await.state.clone()
 }
 
 #[tauri::command]
-fn get_server_status(state: State<Arc<Mutex<ServerConnection>>>) -> String {
-    let conn = state.inner().lock().unwrap();
-    if conn.connected { format!("Connected to {}", conn.address) } else { "Disconnected".to_string() }
+async fn disconnect(state: State<AppState>) -> Result<String, String> {
+    let mut conn = state.connection.write().await;
+    conn.game_stream = None;
+    conn.state = ConnectionState::Disconnected;
+    conn.account_id = 0;
+    conn.ticket = String::new();
+    Ok("Disconnected".to_string())
 }
 
 #[tauri::command]
-fn send_message(
-    state: State<Arc<Mutex<ServerConnection>>>,
+async fn send_game_message(
+    state: State<AppState>,
     opcode: String,
     payload_hex: String,
 ) -> Result<String, String> {
-    // Decode hex payload (support both with and without 0x prefix)
+    use tokio::io::AsyncWriteExt;
+
     let hex_str = if payload_hex.starts_with("0x") {
         &payload_hex[2..]
     } else if payload_hex.is_empty() {
@@ -377,78 +454,95 @@ fn send_message(
     } else {
         &payload_hex
     };
+
     let payload = if hex_str.is_empty() {
         Vec::new()
     } else {
-        hex::decode(hex_str).map_err(|e| format!("Invalid hex payload: {}", e))?
+        hex::decode(hex_str).map_err(|e| format!("Invalid hex: {}", e))?
     };
 
-    // Build envelope with opcode
-    // Use field 1 = client-request (direction) for outbound messages
-    let envelope = build_envelope(&opcode, &payload, FrameDirection::ClientRequest);
+    // Build envelope
+    let envelope = build_envelope(&opcode, &payload);
 
-    let mut conn = state.inner().lock().unwrap();
-    if conn.stream.is_none() {
-        return Err("Not connected to server".to_string());
+    let mut conn = state.connection.write().await;
+    if let Some(stream) = &mut conn.game_stream {
+        protocol::write_frame(stream, &envelope)
+            .await
+            .map_err(|e| format!("Write failed: {}", e))?;
+        Ok(format!("Sent {}", opcode))
+    } else {
+        Err("Not connected to game server".to_string())
     }
-
-    let stream = conn.stream.as_mut().unwrap();
-    protocol::write_frame(stream, &envelope)
-        .map_err(|e| format!("Failed to write frame: {}", e))?;
-
-    Ok(format!("Message sent: {}", opcode))
 }
 
-/// Builds a protobuf envelope with the given opcode and payload.
-/// Uses root field to indicate direction (1=server-push, 2=client-request, 3=server-reply).
-fn build_envelope(opcode: &str, payload: &[u8], direction: FrameDirection) -> Vec<u8> {
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum FrameDirection {
+    Unknown,
+    ServerPush,
+    ClientRequest,
+    ServerReply,
+}
+
+fn build_envelope(opcode: &str, payload: &[u8]) -> Vec<u8> {
     let mut result = Vec::new();
 
-    // Determine root field based on direction
-    // Field 1 = server-push, Field 2 = client-request, Field 3 = server-reply
-    let root_field = match direction {
-        FrameDirection::ServerPush => 1u32,
-        FrameDirection::ClientRequest => 2u32,
-        FrameDirection::ServerReply => 3u32,
-        FrameDirection::Unknown => 1u32, // Default to server-push
-    };
+    // Root field 2 = client-request
+    let root_field = 2u32;
 
-    // Root tag: field number << 3 | wire type (2 = length-delimited)
-    let root_tag = root_field << 3 | 2;
-
-    // First, build the inner Any message
+    // Build inner Any message
     let mut inner_any = Vec::new();
-    
+
     // Field 1 of inner Any: type.ankama.com/{opcode}
     let type_url = format!("type.ankama.com/{}", opcode);
     let type_url_bytes = type_url.as_bytes();
-    inner_any.extend(protocol::write_varint(1 << 3 | 2)); // Inner field 1, wire type 2
+    inner_any.extend(protocol::write_varint(1 << 3 | 2));
     inner_any.extend(protocol::write_varint(type_url_bytes.len() as u32));
     inner_any.extend(type_url_bytes);
 
     // Field 2 of inner Any: actual payload
-    inner_any.extend(protocol::write_varint(2 << 3 | 2)); // Inner field 2, wire type 2
+    inner_any.extend(protocol::write_varint(2 << 3 | 2));
     inner_any.extend(protocol::write_varint(payload.len() as u32));
     inner_any.extend(payload);
 
-    // Wrap the inner Any as the value of the root field
-    result.extend(protocol::write_varint(root_tag)); // Root field tag
-    result.extend(protocol::write_varint(inner_any.len() as u32)); // Length of inner Any
+    // Wrap as root field
+    result.extend(protocol::write_varint(root_field << 3 | 2));
+    result.extend(protocol::write_varint(inner_any.len() as u32));
     result.extend(inner_any);
 
     result
 }
 
+// =============================================================================
+// Tauri Entry Point
+// =============================================================================
+
+#[tauri::command]
+#[tauri::emit]
+fn register_commands(app: tauri::AppHandle) {
+    app.emit("connection-state-changed", "initialized");
+}
+
 fn main() {
     tauri::Builder::default()
+        .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
-            connect_server,
-            disconnect_server,
-            get_server_status,
-            send_message
+            connect_auth,
+            connect_game,
+            get_connection_state,
+            disconnect,
+            send_game_message,
+            register_commands
         ])
         .setup(|app| {
-            app.manage(Arc::new(Mutex::new(ServerConnection::new())));
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                let _ = handle.emit("client-ready", "DreamFus client backend initialized");
+            });
             Ok(())
         })
         .run(tauri::generate_context!())

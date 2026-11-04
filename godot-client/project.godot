@@ -20,6 +20,10 @@ config/icon="res://icon.svg"
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[dotnet]
+
+project/assembly_name="DreamFus"
+
 [gui]
 
 common/auto_focus_strategy=1

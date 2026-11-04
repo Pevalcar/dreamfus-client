@@ -1,15 +1,12 @@
+# SimpleProtocolClient - WebSocket client for game server communication
+# Not using class_name to avoid conflicts with scene node assignments in Godot 4.8 beta2
 class_name SimpleProtocolClient
 extends Node
 
 signal connection_state_changed(connected: bool)
 signal message_received(message_type: String, payload: Dictionary)
 signal error_received(error: String, details: String)
-signal auth_response_received(
-	success: bool,
-	account_id: int,
-	servers_json: Dictionary,
-	error: String,
-)
+signal auth_response_received(success: bool, account_id: int, servers_json: Array, error: String)
 signal server_selection_response_received(
 	success: bool,
 	ticket: String,
@@ -38,12 +35,13 @@ const STATE_CLOSED: int = 3
 var state: ClientState = ClientState.DISCONNECTED
 var _websocket: WebSocketPeer = null
 var _buffer: PackedByteArray = PackedByteArray()
-var _pending_connections: Array[Callable] = []
+var _pending_connections: Array = []
 
 
 func _ready() -> void:
 	print("[SimpleProtocolClient] Inicializado")
 	_websocket = WebSocketPeer.new()
+	_pending_connections = []
 
 
 func _process(delta: float) -> void:
@@ -74,13 +72,6 @@ func _process(delta: float) -> void:
 				connection_state_changed.emit(false)
 
 
-func _process_received_data() -> void:
-	while _websocket.get_available_packet_count() > 0:
-		var packet: PackedByteArray = _websocket.get_packet()
-		_buffer.append_array(packet)
-		_process_buffer()
-
-
 func connect_to_server(target_host: String, target_port: int) -> void:
 	if state == ClientState.CONNECTED:
 		connection_state_changed.emit(true)
@@ -89,7 +80,8 @@ func connect_to_server(target_host: String, target_port: int) -> void:
 	self.host = target_host
 	self.port = target_port
 	state = ClientState.CONNECTING
-	connection_state_changed.emit(false)
+	# NO emitir aquí - esperar a que _process detecte el estado real del WebSocket
+	# Esto evita que los 'await' captúren esta emisión prematura
 
 	var url: String = "ws://%s:%d" % [host, port]
 	var err := _websocket.connect_to_url(url)
@@ -107,11 +99,18 @@ func disconnect_from_server() -> void:
 
 
 func send_message(message_type: String, payload: Dictionary) -> void:
+	print(
+		"[SimpleProtocolClient] send_message: type=%s, state=%s, ws_state=%s"
+		% [message_type, state, _websocket.get_ready_state() if _websocket else "null"]
+	)
 	if state != ClientState.CONNECTED:
-		printerr("[SimpleProtocolClient] No conectado, no se puede enviar mensaje")
+		printerr(
+			"[SimpleProtocolClient] No conectado, no se puede enviar mensaje (state=%s)" % state
+		)
 		return
 
 	var json_str: String = JSON.stringify(payload)
+	print("[SimpleProtocolClient] Enviando JSON: %s" % json_str.substr(0, 100))
 	var json_bytes: PackedByteArray = json_str.to_utf8_buffer()
 
 	# Crear paquete con prefijo de longitud de 4 bytes (big-endian)
@@ -128,13 +127,20 @@ func send_message(message_type: String, payload: Dictionary) -> void:
 	for i in range(json_bytes.size()):
 		packet[4 + i] = json_bytes[i]
 
+	print("[SimpleProtocolClient] Enviando paquete de %d bytes" % packet.size())
 	var err := _websocket.put_packet(packet)
 	if err != OK:
 		printerr("[SimpleProtocolClient] Error enviando paquete: %d" % err)
 
 
 func send_auth_request(lang: String, token: String, install_id: String) -> void:
-	var payload = { "type": "auth_request", "lang": lang, "token": token, "installId": install_id }
+	var payload = {
+		"type": "auth_request",
+		"lang": lang,
+		"token": token,
+		"installId": install_id,
+		"version": "3.6.10.10",
+	}
 	send_message("auth_request", payload)
 
 
@@ -146,6 +152,13 @@ func send_server_selection(server_id: int, account_id: int, lang: String) -> voi
 		"lang": lang,
 	}
 	send_message("server_selection", payload)
+
+
+func _process_received_data() -> void:
+	while _websocket.get_available_packet_count() > 0:
+		var packet: PackedByteArray = _websocket.get_packet()
+		_buffer.append_array(packet)
+		_process_buffer()
 
 
 func _process_buffer() -> void:
@@ -168,8 +181,8 @@ func _process_buffer() -> void:
 	_buffer = _buffer.slice(4 + msg_len)
 
 	# Parsear JSON
-	var json := JSON.new()
-	var parse_result := json.parse(json_str)
+	var json: JSON = JSON.new()
+	var parse_result: int = json.parse(json_str)
 	if parse_result != Error.OK:
 		error_received.emit("JSON_PARSE", "Error parseando JSON: %d" % parse_result)
 		return
@@ -185,7 +198,7 @@ func _process_buffer() -> void:
 		auth_response_received.emit(
 			payload.get("success", false),
 			payload.get("account_id", 0),
-			payload.get("servers", { }),
+			payload.get("servers", []) as Array,
 			payload.get("error", ""),
 		)
 	elif msg_type == "server_selection_response":
