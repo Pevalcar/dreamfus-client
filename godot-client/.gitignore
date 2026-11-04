@@ -1,0 +1,16 @@
+# Godot Engine
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+*.tmp
+*.tmp.txt
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+*.code-workspace

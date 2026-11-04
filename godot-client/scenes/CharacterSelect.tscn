@@ -1,0 +1,128 @@
+[gd_scene format=3 uid="uid://csmcpourlr0gx"]
+
+[ext_resource type="Script" uid="uid://dby4ej03jgu2m" path="res://src/UI/CharacterSelectUI.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://c5fuxlxoa8thm" path="res://icon.svg" id="2_rpq25"]
+
+[node name="CharacterSelectUI" type="Control" unique_id=610510199]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1293691203]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer" unique_id=1248684124]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer/VBoxContainer" unique_id=434041760]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Selecciona tu personaje"
+
+[node name="ServerLabel" type="Label" parent="VBoxContainer/VBoxContainer" unique_id=1955700629]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Cargando servidores..."
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=1199892386]
+layout_mode = 2
+size_flags_vertical = 19
+alignment = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer/HBoxContainer" unique_id=914932585]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="CharacterList" type="VBoxContainer" parent="VBoxContainer/HBoxContainer/ScrollContainer" unique_id=1148368873]
+layout_mode = 2
+
+[node name="CharacterDetailPanel" type="PanelContainer" parent="VBoxContainer/HBoxContainer" unique_id=1915657913]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel" unique_id=1997010464]
+layout_mode = 2
+texture = ExtResource("2_rpq25")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel" unique_id=1637534684]
+layout_mode = 2
+alignment = 1
+
+[node name="CharacterIcon" type="TextureRect" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer" unique_id=1092768663]
+custom_minimum_size = Vector2(128, 128)
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer" unique_id=1421014569]
+layout_mode = 2
+theme_type_variation = &"HeaderLarge"
+text = "NameLabel "
+horizontal_alignment = 1
+
+[node name="BreedLabel" type="Label" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer" unique_id=403648858]
+layout_mode = 2
+theme_type_variation = &"TooltipLabel"
+text = "BreedLabel "
+horizontal_alignment = 1
+
+[node name="LevelLabel" type="Label" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer" unique_id=1614280914]
+layout_mode = 2
+theme_type_variation = &"TooltipLabel"
+text = "LevelLabel  "
+horizontal_alignment = 1
+
+[node name="StatsContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer" unique_id=738259497]
+layout_mode = 2
+alignment = 1
+
+[node name="StatRow" type="HBoxContainer" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer/StatsContainer" unique_id=655743872]
+layout_mode = 2
+alignment = 1
+
+[node name="StatName" type="Label" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer/StatsContainer/StatRow" unique_id=85590636]
+layout_mode = 2
+theme_type_variation = &"HeaderSmall"
+text = "StatName"
+horizontal_alignment = 1
+
+[node name="StatValue" type="Label" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer/StatsContainer/StatRow" unique_id=1433839532]
+layout_mode = 2
+theme_type_variation = &"HeaderSmall"
+text = "StatValue "
+horizontal_alignment = 1
+
+[node name="ActionButtons" type="HBoxContainer" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer" unique_id=550352749]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+alignment = 1
+
+[node name="SelectButton" type="Button" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer/ActionButtons" unique_id=562407194]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "SelectButton "
+
+[node name="DeleteButton" type="Button" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer/ActionButtons" unique_id=1259372769]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "DeleteButton "
+
+[node name="BottomPanel" type="HBoxContainer" parent="VBoxContainer" unique_id=1396689135]
+layout_mode = 2
+alignment = 1
+
+[node name="CreateButton" type="Button" parent="VBoxContainer/BottomPanel" unique_id=319411389]
+layout_mode = 2
+text = "Crear Personaje"
+
+[node name="BackButton" type="Button" parent="VBoxContainer/BottomPanel" unique_id=104380902]
+layout_mode = 2
+text = "Volver"

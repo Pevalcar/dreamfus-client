@@ -5,7 +5,18 @@
 import { EventBus } from './EventBus.js';
 
 // Check if we're running in Tauri environment
-const isTauri = typeof window !== 'undefined' && window.__TAURI_INJECTED__;
+const isTauri = typeof window !== 'undefined' && window.__TURI_INJECTED__;
+
+// Language constants
+export const LANGUAGES = {
+    EN: 'en',
+    ES: 'es',
+    FR: 'fr',
+};
+
+export const DEFAULT_LANGUAGE = LANGUAGES.EN;
+export const CLIENT_VERSION = '3.6.10.10';
+export const INSTALL_ID = 'dreamfus-client';
 
 export const protocol = {
     // Connection state
@@ -336,6 +347,136 @@ export const protocol = {
      */
     async sendRaw(hexString) {
         return this.sendMessage('raw', hexString);
+    },
+    
+    // =========================================================================
+    // Protocol message builders (Dofus wire format helpers)
+    // =========================================================================
+    
+    /**
+     * Build connection greeting (for port 5555 initial handshake)
+     * Returns hex-encoded protobuf message without envelope
+     */
+    async buildConnectionGreeting(language = 'en') {
+        if (isTauri) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const result = await invoke('build_connection_greeting', {
+                    language,
+                    token: '',
+                    installId: INSTALL_ID,
+                    version: CLIENT_VERSION
+                });
+                return { success: true, message: result, payload: result };
+            } catch (e) {
+                return { success: false, message: e.toString() };
+            }
+        }
+        return { success: false, message: 'Not available in web mode' };
+    },
+    
+    /**
+     * Build server selection message
+     * Returns hex-encoded protobuf message without envelope
+     */
+    async buildServerSelection(serverId, language = 'en') {
+        if (isTauri) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const result = await invoke('build_server_selection', {
+                    language,
+                    serverId
+                });
+                return { success: true, message: result, payload: result };
+            } catch (e) {
+                return { success: false, message: e.toString() };
+            }
+        }
+        return { success: false, message: 'Not available in web mode' };
+    },
+    
+    /**
+     * Build kqz (present ticket) message WITH envelope
+     * Used to connect to game server with a ticket
+     */
+    async buildPresentTicket(ticketHex, language = 'en') {
+        if (isTauri) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const result = await invoke('build_kqz', {
+                    ticket: ticketHex,
+                    language
+                });
+                return { success: true, message: result, payload: result };
+            } catch (e) {
+                return { success: false, message: e.toString() };
+            }
+        }
+        return { success: false, message: 'Not available in web mode' };
+    },
+    
+    /**
+     * Build kvw (select character) message WITH envelope
+     */
+    async buildSelectCharacter(characterId) {
+        if (isTauri) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const result = await invoke('build_kvw', { characterId });
+                return { success: true, message: result, payload: result };
+            } catch (e) {
+                return { success: false, message: e.toString() };
+            }
+        }
+        return { success: false, message: 'Not available in web mode' };
+    },
+    
+    /**
+     * Parse authentication response from raw protobuf
+     */
+    async parseAuthResponse(hexPayload) {
+        if (isTauri) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const result = await invoke('parse_auth_response', { hexPayload });
+                return { success: true, message: result };
+            } catch (e) {
+                return { success: false, message: e.toString() };
+            }
+        }
+        return { success: false, message: 'Not available in web mode' };
+    },
+    
+    /**
+     * Parse ticket response from raw protobuf
+     */
+    async parseTicketResponse(hexPayload) {
+        if (isTauri) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const result = await invoke('parse_ticket_response', { hexPayload });
+                return { success: true, message: result };
+            } catch (e) {
+                return { success: false, message: e.toString() };
+            }
+        }
+        return { success: false, message: 'Not available in web mode' };
+    },
+    
+    /**
+     * Parse character list from kvi message
+     */
+    async parseCharacterList(hexPayload) {
+        if (isTauri) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const result = await invoke('parse_character_list', { hexPayload });
+                return { success: true, message: result };
+            } catch (e) {
+                return { success: false, message: e.toString() };
+            }
+        }
+        return { success: false, message: 'Not available in web mode' };
     },
     
     /**

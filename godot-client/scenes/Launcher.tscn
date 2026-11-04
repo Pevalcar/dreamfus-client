@@ -1,0 +1,100 @@
+[gd_scene format=3 uid="uid://chvl1j3cwn6fy"]
+
+[ext_resource type="Script" uid="uid://dnshru70vsaap" path="res://src/UI/LauncherUI.gd" id="1"]
+
+[node name="Launcher" type="Control" unique_id=1069323416]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=336634350]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer" unique_id=1137314517]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "DreamFus"
+
+[node name="VersionLabel" type="Label" parent="VBoxContainer" unique_id=1900331134]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "DreamFus v3.6.10.10"
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer" unique_id=605597909]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Listo"
+
+[node name="ConnectionProgress" type="ProgressBar" parent="VBoxContainer" unique_id=1140663475]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="ConnectButton" type="Button" parent="VBoxContainer" unique_id=1343741566]
+layout_mode = 2
+text = "Conectar"
+
+[node name="LangLabel" type="Label" parent="VBoxContainer" unique_id=53868761]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Idioma:"
+
+[node name="LangOption" type="OptionButton" parent="VBoxContainer" unique_id=1119431902]
+layout_mode = 2
+
+[node name="TokenEntry" type="LineEdit" parent="VBoxContainer" unique_id=1480187122]
+visible = false
+layout_mode = 2
+placeholder_text = "Token de sesión"
+
+[node name="UsernameLabel" type="Label" parent="VBoxContainer" unique_id=1684251611]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Usuario:"
+
+[node name="UsernameEntry" type="LineEdit" parent="VBoxContainer" unique_id=2060047001]
+layout_mode = 2
+placeholder_text = "Usuario"
+
+[node name="PasswordLabel" type="Label" parent="VBoxContainer" unique_id=1439425172]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Contraseña:"
+
+[node name="PasswordEntry" type="LineEdit" parent="VBoxContainer" unique_id=575571502]
+layout_mode = 2
+placeholder_text = "Contraseña"
+
+[node name="InstallIdLabel" type="Label" parent="VBoxContainer" unique_id=1579086040]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Install ID:"
+
+[node name="ServerConfig" type="VBoxContainer" parent="VBoxContainer" unique_id=352466500]
+layout_mode = 2
+
+[node name="ServerHostLabel" type="Label" parent="VBoxContainer/ServerConfig" unique_id=1567023118]
+layout_mode = 2
+text = "Servidor:"
+
+[node name="ServerHostEntry" type="LineEdit" parent="VBoxContainer/ServerConfig" unique_id=578084689]
+layout_mode = 2
+text = "127.0.0.1"
+
+[node name="ServerPortLabel" type="Label" parent="VBoxContainer/ServerConfig" unique_id=444269239]
+layout_mode = 2
+text = "Puerto:"
+
+[node name="ServerPortSpin" type="SpinBox" parent="VBoxContainer/ServerConfig" unique_id=527039494]
+layout_mode = 2
+max_value = 65535.0
+value = 5557.0
+
+[node name="HTTPRequest" type="HTTPRequest" parent="." unique_id=150252223]
