@@ -7,8 +7,8 @@
 
 extends SceneTree
 
-var tests_passed := 0
-var tests_failed := 0
+var tests_passed: int = 0
+var tests_failed: int = 0
 
 func _init():
 	OS.set_exit_on_quit(true)
@@ -22,8 +22,8 @@ func main():
 	
 	# Test 1: build_character_selection returns correct flat varint format
 	print("Test 1: build_character_selection produces flat {f1: id} format")
-	var character_id := 13825558
-	var payload := GameClient.build_character_selection(character_id)
+	var character_id: int = 13825558
+	var payload: PackedByteArray = GameClient.build_character_selection(character_id)
 	
 	# Expected: field 1 (f1=1, wire=0) as varint tag, followed by the ID as varint
 	var expected_prefix := 0x08  # tag for field 1, wire type 0 (varint)
@@ -38,8 +38,8 @@ func main():
 	
 	# Test 2: payload contains correct character ID as varint
 	print("Test 2: payload contains correct character ID as varint")
-	var parsed := Proto.parse(payload)
-	var id_field := Proto.first(parsed, 1)
+	var parsed: Array = Proto.parse(payload)
+	var id_field: Variant = Proto.first(parsed, 1)
 	
 	if id_field != null and id_field.has("v"):
 		var parsed_id := int(id_field["v"])
@@ -107,10 +107,10 @@ func main():
 	
 	# Test 5: different character ID format
 	print("Test 5: small character ID format is correct")
-	var small_id := 123
-	var small_payload := GameClient.build_character_selection(small_id)
-	var small_parsed := Proto.parse(small_payload)
-	var small_field := Proto.first(small_parsed, 1)
+	var small_id: int = 123
+	var small_payload: PackedByteArray = GameClient.build_character_selection(small_id)
+	var small_parsed: Array = Proto.parse(small_payload)
+	var small_field: Variant = Proto.first(small_parsed, 1)
 	
 	if small_field != null and small_field.has("v") and int(small_field["v"]) == small_id:
 		print("  PASSED - small ID %d encoded correctly" % small_id)
