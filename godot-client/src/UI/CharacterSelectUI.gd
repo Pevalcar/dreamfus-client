@@ -141,8 +141,8 @@ func _get_breed_emblem(breed: int) -> Texture2D:
 		return null
 
 	# Convertir breed (1-16) a número de archivo (10, 20, 30...)
-	var file_num = breed * 10
-	var emblem_path = GAME_ASSETS_BASE_PATH + "d3picto/hint/%d.png" % file_num
+	var file_num: int = breed * 10
+	var emblem_path: String = GAME_ASSETS_BASE_PATH + "d3picto/hint/%d.png" % file_num
 
 	if ResourceLoader.exists(emblem_path):
 		return load(emblem_path)

@@ -66,13 +66,15 @@ kvl: f2 {                     // solicitud del cliente
 
 ### 2.1 Cliente → Servidor
 
-Después de que el jugador elige en la lista:
+Después de que el jugador elige en la lista, el cliente envía `kvw` como un push message con payload plano:
 
 ```
 kvw: f1 {                      // petición del cliente
-    f1: { f2: 12345678 }       // ID del personaje
+    f1: 12345678               // ID del personaje (varint plano, NO mensaje anidado)
 }
 ```
+
+**Importante:** El formato correcto es `{ f1: id }` donde `f1` es un varint con el ID del personaje. El bug anterior enviaba `{ f1: { f1: id } }` (mensaje anidado), lo que causaba que el servidor rechazara la selección por no encontrar el character_id.
 
 ### 2.2 Servidor → Cliente
 
