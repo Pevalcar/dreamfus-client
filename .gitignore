@@ -24,6 +24,9 @@ Thumbs.db
 .idea/
 *.code-workspace
 
+# Godot MCP Toolkit addon (toolkit runtime code, not versioned individually)
+godot-client/addons/
+
 # NPM
 package-lock.json
 
@@ -33,8 +36,6 @@ Cargo.lock
 
 # Temp/Generated
 .agents/
-CHANGELOG.md
-docs/
 gen/
 skills-lock.json
 src-tauri/

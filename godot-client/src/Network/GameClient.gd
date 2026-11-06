@@ -4,6 +4,9 @@
 class_name GameClient
 extends Node
 
+## Preload ByteArrayExtensions helper para Godot 4.8
+const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
+
 signal connected
 signal disconnected
 signal message_received(opcode: String, payload: PackedByteArray, request_id: int)
@@ -121,6 +124,7 @@ func send_request(opcode: String, payload: PackedByteArray = PackedByteArray()) 
 ## Send a push message (server-style, for special cases).
 func send_push(opcode: String, payload: PackedByteArray = PackedByteArray()) -> void:
 	if tcp == null or not _connected:
+		printerr("[GameClient] No conectado, no se puede enviar push: %s" % opcode)
 		return
 
 	var body: PackedByteArray = Proto.push(opcode, payload)
@@ -128,7 +132,11 @@ func send_push(opcode: String, payload: PackedByteArray = PackedByteArray()) -> 
 	Proto.write_varint(out, body.size())
 	out.append_array(body)
 
-	tcp.put_data(out)
+	print("[GameClient] Push %s: %d bytes (payload=%d)" % [opcode, out.size(), payload.size()])
+	var err: Error = tcp.put_data(out)
+	if err != OK:
+		printerr("[GameClient] Error enviando push %s: %d" % [opcode, err])
+		error_occurred.emit("Error enviando push %s" % opcode)
 
 
 ## Build and send kqz (present ticket).
@@ -175,16 +183,24 @@ func send_ticket(ticket: String, language: String = "es") -> void:
 
 
 ## Build and send kvw (select character by ID).
-## kvw is a server-push style message: f1 { f1: character_id }
-func send_character_selection(character_id: int) -> void:
+## kvw format: f1 { f1: character_id } - but the payload passed to push() is just the inner message { f1: id }
+## The push() function wraps it in the Any envelope with the opcode URL.
+## Server expects: field 1 as varint containing the character ID.
+static func build_character_selection(character_id: int) -> PackedByteArray:
+	"""Build kvw payload: { f1: character_id } as a flat varint message."""
 	if character_id <= 0:
 		printerr("[GameClient] Invalid character_id: %d" % character_id)
-		return
+		return PackedByteArray()
+	var payload: PackedByteArray = PackedByteArray()
+	Proto.put_varint(payload, 1, character_id)
+	return payload
 
-	var inner_msg: PackedByteArray = PackedByteArray()
-	Proto.put_varint(inner_msg, 1, character_id) # f1 = character_id
-	var wrapper: PackedByteArray = Proto.message(1, inner_msg) # f1 = wrapper
-	send_push("kvw", wrapper)
+
+func send_character_selection(character_id: int) -> void:
+	var payload := build_character_selection(character_id)
+	if payload.is_empty():
+		return
+	send_push("kvw", payload)
 
 
 ## Build and send kqo (heartbeat, every 5 seconds).
@@ -234,8 +250,8 @@ func _drain_buffer() -> void:
 			)
 			return # esperar más datos
 
-		var frame: PackedByteArray = buffer.slice(end, end + size)
-		buffer = buffer.slice(end + size)
+		var frame: PackedByteArray = ByteArrayExtensions.byte_subarray(buffer, end, size)
+		buffer = ByteArrayExtensions.byte_subarray_from(buffer, end + size)
 		frames_parsed += 1
 
 		# Aumentar límite para permitir batch completo del welcome burst (hasta 20 frames)

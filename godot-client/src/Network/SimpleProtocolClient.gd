@@ -3,6 +3,9 @@
 class_name SimpleProtocolClient
 extends Node
 
+## Preload ByteArrayExtensions helper para Godot 4.8
+const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
+
 signal connection_state_changed(connected: bool)
 signal message_received(message_type: String, payload: Dictionary)
 signal error_received(error: String, details: String)
@@ -174,11 +177,11 @@ func _process_buffer() -> void:
 		return
 
 	# Extraer el payload JSON
-	var json_bytes := _buffer.slice(4, 4 + msg_len)
+	var json_bytes := ByteArrayExtensions.byte_subarray(_buffer, 4, msg_len)
 	var json_str: String = json_bytes.get_string_from_utf8()
 
 	# Limpiar el buffer
-	_buffer = _buffer.slice(4 + msg_len)
+	_buffer = ByteArrayExtensions.byte_subarray_from(_buffer, 4 + msg_len)
 
 	# Parsear JSON
 	var json: JSON = JSON.new()

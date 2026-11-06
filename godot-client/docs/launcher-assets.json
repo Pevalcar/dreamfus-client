@@ -1,0 +1,92 @@
+{
+  "fonts": {
+    "Lexend-Bold": {
+      "path": "fonts/Lexend-Bold.ttf",
+      "weight": "bold",
+      "usage": "Textos negrita"
+    },
+    "Lexend-Medium": {
+      "path": "fonts/Lexend-Medium.ttf",
+      "weight": "medium",
+      "usage": "Textos medio peso"
+    },
+    "Lexend-Regular": {
+      "path": "fonts/Lexend-Regular.ttf",
+      "weight": "regular",
+      "usage": "Textos normales"
+    },
+    "Lexend-SemiBold": {
+      "path": "fonts/Lexend-SemiBold.ttf",
+      "weight": "semibold",
+      "usage": "Textos semi-negrita"
+    },
+    "Rowdies-Regular": {
+      "path": "fonts/Rowdies-Regular.ttf",
+      "weight": "regular",
+      "usage": "Fuente decorativa"
+    }
+  },
+  "images": {
+    "launcher": {
+      "logoDofus": { "w": 511, "h": 470, "slice": null, "use": "Logo principal" },
+      "loginBackground": { "w": 1920, "h": 1080, "slice": null, "use": "Fondo de login" },
+      "gradientWhiteVerticalRectangle": { "w": "?", "h": "?", "slice": null, "use": "Gradiente sobre logo" },
+      "socle": { "w": 912, "h": 617, "slice": null, "use": "Fondo del juego" }
+    },
+    "buttons": {
+      "playButtonBackground": { "w": 280, "h": 104, "slice": [0, 60, 0, 60], "use": "Botón JUGAR" },
+      "playButtonBorder": { "w": 261, "h": 118, "slice": null, "use": "Borde botón" }
+    },
+    "dialogs": {
+      "dialogBackground": { "w": 574, "h": 134, "slice": [66, 0, 67, 0], "use": "Fondo de diálogo" },
+      "dialogBorder": { "w": 574, "h": 134, "slice": [66, 0, 67, 0], "use": "Borde de diálogo" },
+      "dialogHeader": { "w": 145, "h": 73, "slice": [22, 72, 22, 72], "use": "Cabecera de diálogo" }
+    },
+    "shadows": {
+      "windowShadow": { "w": 92, "h": 92, "slice": [45, 45, 45, 45], "use": "Sombra de ventana" },
+      "windowInnerShadow": { "w": 600, "h": 600, "slice": [70, 70, 70, 70], "use": "Sombra interior" }
+    }
+  },
+  "ui_components": {
+    "login": ["login.json"],
+    "main_menu": ["mainMenu.json", "preGameMainMenu.json"],
+    "character_selection": ["characterSelection.json", "characterHeader.json", "characterLine.json"],
+    "server_selection": ["ServerSelection.json", "serverCard.json"],
+    "loading": ["LoadingScreen.json"],
+    "game_menu": ["gameMenu.json"],
+    "password": ["passwordMenu.json"],
+    "banner": ["bannerMenu.json"]
+  },
+  "server_types": [
+    { "tab": "PIONNIER (x/5)", "type": "pioneer", "max_active": 5 },
+    { "tab": "PIONNIER MONOCOMPTE (x/5)", "type": "pioneer_monocombat", "max_active": 5 },
+    { "tab": "CLASSIQUE (x/5)", "type": "classic", "max_active": 5 },
+    { "tab": "CLASSIQUE MONOCOMPTE (x/5)", "type": "classic_monocombat", "max_active": 5 },
+    { "tab": "ÉPIQUE (x/5)", "type": "epic", "max_active": 5 },
+    { "tab": "TOURNOIS (x/5)", "type": "tournament", "max_active": 5 },
+    { "tab": "TEMPORIS (x/5)", "type": "temporis", "max_active": 5 }
+  ],
+  "godot_scene_structure": {
+    "Launcher": {
+      "root": "Control",
+      "children": [
+        "CanvasLayer (logo + gradient background)",
+        "VBoxContainer (login form)",
+        "HTTPRequest (auth client)"
+      ]
+    },
+    "ServerCard": {
+      "root": "TextureRect",
+      "script": "ServerCard.gd",
+      "children": [
+        "Panel (PanelContainer with 9-slice)",
+        "VBoxContainer",
+        "Label (server name)",
+        "HBoxContainer (stats row with icons)",
+        "HBoxContainer (friends row)",
+        "HBoxContainer (character carousel)",
+        "Tag (recommended badge)"
+      ]
+    }
+  }
+}

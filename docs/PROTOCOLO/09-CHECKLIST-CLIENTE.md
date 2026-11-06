@@ -274,7 +274,8 @@ Enviar: krt {}
 ↓
 Recibir: ráfaga de bienvenida (kvc, krv, kvi, kvd)
 ↓
-Enviar: kvw {f1: {f1: id}} o kvl {f1: id}
+Enviar: kvw {f1: id}           ← CORREGIDO: payload plano { f1: id }, no anidado
+    o kvl {f1: id}
 ↓
 Recibir: kva, hms, ivx, kub, etc. (bloque 1)
 ↓
@@ -376,6 +377,7 @@ Game (Control, script: GameUI.gd)
 | 5 | `_on_server_selection_response_received` crea `TestHero` fake | `GameManager.gd` | ~130 | No hay conexión TCP | Implementar `GameClient` |
 | 6 | `lang_option` sin items en `_setup_defaults` | `LauncherUI.gd` | 32 | No se llenó el OptionButton | Añadir items en `_ready` |
 | 7 | `lang` emitido como `int` pero `auth_requested` declara `String` | `LauncherUI.gd` | 72 | Señal mal declarada | Cambiar tipo a `int` o emitir como String |
+| 8 | `kvw` con payload anidado `{f1: {f1: id}}` rechazado | `GameClient.gd` | 114-120 | Formato incorrecto, el servidor espera varint plano | Cambiar a `build_character_selection()` que envíe `{f1: id}` |
 
 ---
 
