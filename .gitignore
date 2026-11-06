@@ -42,6 +42,3 @@ src-tauri/
 test/
 tests/
 verify_protocol.ps1
-
-# Documentation (kept locally but not versioned)
-# A2D_FLOW.md, docs/DEFLATE_SOLUTION.md, etc.
