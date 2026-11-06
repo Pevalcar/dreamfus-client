@@ -15,8 +15,8 @@ extends Button
 
 signal selected(character_slot: CharacterSlot)
 
-const GAME_ASSETS_BASE_PATH := "C:/Users/pevalcar/AppData/Local/Alea/"
-
+# No hardcoded path - uses AssetCatalog for external asset loading
+# Breed emblems are stored in d3picto/hint/ as 10.png, 20.png, 30.png...
 const BREED_NAMES := {
 	1: "Feca",
 	2: "Osamodas",
@@ -93,7 +93,7 @@ func _update_ui() -> void:
 	if level_label != null:
 		level_label.text = "Niv. %d" % character_level
 
-	var emblem := _get_breed_emblem(character_breed)
+	var emblem: Texture2D = _get_breed_emblem(character_breed)
 	if emblem != null and icon_container != null:
 		icon_container.texture = emblem
 
@@ -101,17 +101,10 @@ func _update_ui() -> void:
 func _get_breed_emblem(breed: int) -> Texture2D:
 	"""Carga el emblem de raza desde los assets externos de Alea
 	Los emblems están numerados: breed=1 → 10.png, breed=2 → 20.png, etc.
+	Usa AssetCatalog para cargar desde la instalación Alea externa.
 	"""
-	if breed < 1 or breed > 16:
-		return null
-
-	var file_num = breed * 10
-	var emblem_path = GAME_ASSETS_BASE_PATH + "d3picto/hint/%d.png" % file_num
-
-	if ResourceLoader.exists(emblem_path):
-		return load(emblem_path)
-
-	return null
+	# AssetCatalog is autoload, access via get_node or global variable
+	return AssetCatalog.load_breed_emblem(breed)
 
 
 func _get_breed_name(breed: int) -> String:

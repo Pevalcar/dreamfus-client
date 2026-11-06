@@ -103,6 +103,21 @@ Los detalles técnicos de implementación están en `docs/TCP_HANDBSHAKE.md`.
 - **Godot 4.8 beta2** o superior (GDScript puro)
 - **Servidor DreamFus** ejecutándose (puerto 5557)
 
+### Instalar Godot MCP Toolkit (Recomendado)
+
+Para una navegación de código mejorada, instale el Godot MCP Toolkit:
+
+```bash
+npm install -g @npgamedev/godot-mcp-server@1.1.2
+```
+
+Esto permite:
+- Búsqueda de símbolos y trazado de código
+- Consultas de arquitectura
+- Verificación de cobertura
+
+Ver `docs/README.md` en este directorio para más detalles.
+
 ### Abrir en Godot Editor
 
 1. Abrir Godot Editor (4.8 beta2+)
@@ -136,6 +151,11 @@ O simplemente abrir el proyecto en el editor de Godot y presionar F5.
 - kqz → kra → kvi(4 chars) → jtg → kvw
 - `characters_received` emitido correctamente
 - Botones de selección con raza y nivel visibles
+
+**Estado del MCP:**
+- Símbolos exportados: A2DParser, A2D1Header, A2DZHeader, etc.
+- Ver `.mcp.json` para configuración del servidor MCP
+- Ver `docs/DEFLATE_SOLUTION.md` para opciones de parsing A2D.Z
 
 ## 🦾 Emblems de Raza (Breed Icons)
 

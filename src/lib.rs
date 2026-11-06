@@ -1,30 +1,31 @@
-//! DreamFus Client - Tauri Backend
-//! 
-//! This module handles:
+//! DreamFus Client - Core Library
+//!
+//! This module provides:
 //! 1. WebSocket authentication (port 5557) - auth_request, server_selection
 //! 2. TCP game connection (port 5555) - SimpleProtocol with VarInt framing
 //! 3. Ticket-based server handoff
-//!
-//! Architecture: Separate reader tasks, no blocking Mutex during I/O
+//! 4. Character avatar rendering via A2D parser
 
-use serde::{Deserialize, Serialize};
+pub mod a2d;
+
 use std::sync::Arc;
-use std::time::Duration;
-use tauri::{emit, Emitter, Manager, State};
-use tokio::net::{TcpListener, TcpStream, WebSocketStream};
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tokio_tungstenite::tungstenite::protocol::Message;
+use serde::{Serialize, Deserialize};
+use tokio::net::TcpStream;
+use tokio::sync::RwLock;
+
+// Re-export types from a2d module for convenience
+pub use a2d::{A2D1, A2DZ, SpriteInfo, ImageContainer, A2DParseResult, HeaderInfo, A2DError};
 
 // =============================================================================
 // State Management
 // =============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ConnectionState {
     Disconnected,
     Connecting,
     Authenticating,
-    Authenticated { accountId: i64, ticket: String },
+    Authenticated { account_id: i64, ticket: String },
     ConnectingGame { host: String, port: u16 },
     InGame,
     Error(String),
@@ -36,8 +37,8 @@ impl std::fmt::Display for ConnectionState {
             ConnectionState::Disconnected => write!(f, "Disconnected"),
             ConnectionState::Connecting => write!(f, "Connecting"),
             ConnectionState::Authenticating => write!(f, "Authenticating"),
-            ConnectionState::Authenticated { accountId, .. } => {
-                write!(f, "Authenticated(accountId={accountId})")
+            ConnectionState::Authenticated { account_id, .. } => {
+                write!(f, "Authenticated(accountId={account_id})")
             }
             ConnectionState::ConnectingGame { host, port } => {
                 write!(f, "ConnectingGame({host}:{port})")
@@ -48,6 +49,7 @@ impl std::fmt::Display for ConnectionState {
     }
 }
 
+#[derive(Debug)]
 pub struct ClientConnection {
     pub state: ConnectionState,
     pub host: String,
@@ -186,7 +188,7 @@ pub mod protocol {
 
     /// Read a frame with VarInt length prefix (for game server protocol)
     pub async fn read_frame(stream: &mut TcpStream) -> Option<Vec<u8>> {
-        use tokio::io::{AsyncReadExt, ReadBuf};
+        use tokio::io::AsyncReadExt;
 
         let mut len_bytes = [0u8; 5];
         let mut read_pos = 0;
@@ -236,315 +238,103 @@ pub mod protocol {
 }
 
 // =============================================================================
-// Connection Commands
+// A2D Character Avatar Command Implementations (called from Tauri commands)
 // =============================================================================
 
-#[tauri::command]
-async fn connect_auth(
-    state: State<AppState>,
-    host: String,
-    port: u16,
-    token: String,
-    install_id: String,
-    lang: String,
-) -> Result<String, String> {
-    let auth_port = if port == 5555 { 5557 } else { port };
+/// Character avatar representation for frontend
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CharacterAvatar {
+    pub name: String,
+    pub level: i32,
+    pub breed: i32,
+    pub sex: i32,
+    pub look: String,
+    pub avatar_images: Vec<AvatarImage>,
+    pub background_url: Option<String>,
+}
 
-    {
-        let conn = state.connection.read().await;
-        if conn.state == ConnectionState::Authenticated {
-            return Err("Already authenticated".to_string());
-        }
-    }
+/// An image component for character avatar
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AvatarImage {
+    pub sprite_name: String,
+    pub width: u16,
+    pub height: u16,
+    pub data_url: String, // base64 data URL for image delivery
+}
 
-    // Update state to connecting
-    {
-        let mut conn = state.connection.write().await;
-        conn.state = ConnectionState::Connecting;
-        conn.host = host.clone();
-        conn.port = port;
-    }
+/// Result from parsing an A2D file for character display
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CharacterDisplayData {
+    pub sprites: Vec<SpriteInfo>,
+    pub images: Vec<AvatarImage>,
+    pub breed_texture: Option<AvatarImage>,
+}
 
-    let ws_url = format!("ws://{}:{}", host, auth_port);
-    let conn_state = state.connection.clone();
+/// Get breed emblem image path
+pub fn get_breed_emblem_path(breed: i32) -> String {
+    format!("d3picto/hint/{}.png", breed * 10)
+}
 
-    let result = tauri::async_runtime::spawn(async move {
-        let (ws_stream, _) = tokio_tungstenite::connect_async(&ws_url.parse().unwrap())
-            .await
-            .map_err(|e| format!("WebSocket connection failed: {}", e))?;
-
-        let (mut write, mut read) = ws_stream.split();
-        let (msg_tx, mut msg_rx) = mpsc::channel::<String>(16);
-
-        // Spawn reader task
-        let msg_tx_clone = msg_tx.clone();
-        let reader_task = tauri::async_runtime::spawn(async move {
-            while let Some(msg) = read.next().await {
-                let msg = msg.map_err(|e| e.to_string())?;
-                match msg {
-                    Message::Binary(buf) => {
-                        if let Ok(json) = String::from_utf8(buf.to_vec()) {
-                            let _ = msg_tx_clone.send(json).await;
-                        }
-                    }
-                    _ => {}
-                }
+/// Parse an A2D file and return character display data
+pub async fn parse_a2d_command(path: String) -> Result<CharacterDisplayData, String> {
+    use crate::a2d::parse_a2d;
+    use base64::{engine::general_purpose, Engine as _};
+    
+    let result = parse_a2d(&path).map_err(|e| e.to_string())?;
+    
+    let images: Vec<AvatarImage> = result.images
+        .iter()
+        .map(|img| {
+            let data_url = format!("data:image/webp;base64,{}", 
+                general_purpose::STANDARD.encode(&img.data));
+            AvatarImage {
+                sprite_name: img.sprite_name.clone(),
+                width: img.width,
+                height: img.height,
+                data_url,
             }
-        });
-
-        // Send auth request
-        let auth_req = AuthRequest {
-            type_field: "auth_request".to_string(),
-            token,
-            install_id,
-            lang,
-            version: "3.6.10.10".to_string(),
-        };
-
-        let json = serde_json::to_string(&auth_req)
-            .map_err(|e| format!("Failed to serialize auth request: {}", e))?;
-
-        write.send(Message::Binary(json.into())).await?;
-
-        // Wait for auth response
-        let auth_response: AuthResponse = loop {
-            match msg_rx.recv().await {
-                Some(msg) => {
-                    let parsed: serde_json::Value =
-                        serde_json::from_str(&msg).map_err(|e| e.to_string())?;
-                    if parsed.get("type") == Some(&serde_json::json!("auth_response")) {
-                        return serde_json::from_value(parsed).map_err(|e| e.to_string());
-                    }
-                    if parsed.get("type") == Some(&serde_json::json!("error")) {
-                        return Err(parsed.get("message").unwrap_or("Auth error").to_string());
-                    }
-                }
-                None => return Err("WebSocket closed".to_string()),
-            }
-        };
-
-        Ok::<_, String>(auth_response)
-    })
-    .await.map_err(|e| format!("Spawn error: {:?}", e))?;
-
-    match result {
-        Ok(auth_resp) => {
-            if !auth_resp.success {
-                let err = auth_resp.error.unwrap_or("Unknown error".to_string());
-                (*state.connection.write().await) = ClientConnection::default();
-                return Err(err);
-            }
-
-            let account_id = auth_resp.account_id.unwrap_or(0);
-            let servers = auth_resp.servers.unwrap_or_default();
-
-            // Auto-select server 290 (DreamFus)
-            let server_info = servers
-                .iter()
-                .find(|s| s.id == 290)
-                .cloned()
-                .unwrap_or(ServerInfo {
-                    id: 290,
-                    name: "DreamFus".to_string(),
-                    population: 0,
-                    is_full: false,
-                });
-
-            // Update state to authenticated
-            {
-                let mut conn = state.connection.write().await;
-                conn.state = ConnectionState::Authenticated {
-                    accountId: account_id,
-                    ticket: String::new(),
-                };
-                conn.account_id = account_id;
-            }
-
-            // Request server selection
-            let selection_req = ServerSelectionRequest {
-                type_field: "server_selection".to_string(),
-                account_id,
-                server_id: server_info.id,
-                lang: lang.clone(),
-            };
-
-            let selection_json =
-                serde_json::to_string(&selection_req).map_err(|e| e.to_string())?;
-
-            // Send server selection and wait for response
-            let host = state.connection.read().await.host.clone();
-            let port = state.connection.read().await.port;
-
-            // For simplicity, we return the server info and let the frontend handle the rest
-            Ok(format!(
-                "Authenticated account_id={} servers=[{}]",
-                account_id,
-                serde_json::to_string(&servers).unwrap_or_default()
-            ))
-        }
-        Err(e) => {
-            (*state.connection.write().await) = ClientConnection::default();
-            Err(e)
-        }
-    }
-}
-
-#[tauri::command]
-async fn connect_game(
-    state: State<AppState>,
-    host: String,
-    port: u16,
-    ticket: String,
-) -> Result<String, String> {
-    // Connect to the game server via TCP with ticket
-    let addr = format!("{}:{}", host, port);
-
-    match TcpStream::connect(&addr).await {
-        Ok(mut stream) => {
-            // Send ticket as first message (game server expects this)
-            let ticket_msg = format!("{{\"ticket\":\"{}\"}}", ticket);
-            let frame = protocol::write_varint(ticket_msg.len() as u32);
-            let mut full_msg = frame;
-            full_msg.extend(ticket_msg.as_bytes());
-
-            use tokio::io::AsyncWriteExt;
-            stream.write_all(&full_msg).await?;
-
-            // Update state
-            {
-                let mut conn = state.connection.write().await;
-                conn.game_stream = Some(stream);
-                conn.state = ConnectionState::InGame;
-                conn.ticket = ticket;
-            }
-
-            Ok(format!("Connected to game server at {}:{}", host, port))
-        }
-        Err(e) => Err(format!("Game server connection failed: {}", e)),
-    }
-}
-
-#[tauri::command]
-async fn get_connection_state(state: State<AppState>) -> ConnectionState {
-    state.connection.read().await.state.clone()
-}
-
-#[tauri::command]
-async fn disconnect(state: State<AppState>) -> Result<String, String> {
-    let mut conn = state.connection.write().await;
-    conn.game_stream = None;
-    conn.state = ConnectionState::Disconnected;
-    conn.account_id = 0;
-    conn.ticket = String::new();
-    Ok("Disconnected".to_string())
-}
-
-#[tauri::command]
-async fn send_game_message(
-    state: State<AppState>,
-    opcode: String,
-    payload_hex: String,
-) -> Result<String, String> {
-    use tokio::io::AsyncWriteExt;
-
-    let hex_str = if payload_hex.starts_with("0x") {
-        &payload_hex[2..]
-    } else if payload_hex.is_empty() {
-        ""
-    } else {
-        &payload_hex
-    };
-
-    let payload = if hex_str.is_empty() {
-        Vec::new()
-    } else {
-        hex::decode(hex_str).map_err(|e| format!("Invalid hex: {}", e))?
-    };
-
-    // Build envelope
-    let envelope = build_envelope(&opcode, &payload);
-
-    let mut conn = state.connection.write().await;
-    if let Some(stream) = &mut conn.game_stream {
-        protocol::write_frame(stream, &envelope)
-            .await
-            .map_err(|e| format!("Write failed: {}", e))?;
-        Ok(format!("Sent {}", opcode))
-    } else {
-        Err("Not connected to game server".to_string())
-    }
-}
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum FrameDirection {
-    Unknown,
-    ServerPush,
-    ClientRequest,
-    ServerReply,
-}
-
-fn build_envelope(opcode: &str, payload: &[u8]) -> Vec<u8> {
-    let mut result = Vec::new();
-
-    // Root field 2 = client-request
-    let root_field = 2u32;
-
-    // Build inner Any message
-    let mut inner_any = Vec::new();
-
-    // Field 1 of inner Any: type.ankama.com/{opcode}
-    let type_url = format!("type.ankama.com/{}", opcode);
-    let type_url_bytes = type_url.as_bytes();
-    inner_any.extend(protocol::write_varint(1 << 3 | 2));
-    inner_any.extend(protocol::write_varint(type_url_bytes.len() as u32));
-    inner_any.extend(type_url_bytes);
-
-    // Field 2 of inner Any: actual payload
-    inner_any.extend(protocol::write_varint(2 << 3 | 2));
-    inner_any.extend(protocol::write_varint(payload.len() as u32));
-    inner_any.extend(payload);
-
-    // Wrap as root field
-    result.extend(protocol::write_varint(root_field << 3 | 2));
-    result.extend(protocol::write_varint(inner_any.len() as u32));
-    result.extend(inner_any);
-
-    result
-}
-
-// =============================================================================
-// Tauri Entry Point
-// =============================================================================
-
-#[tauri::command]
-#[tauri::emit]
-fn register_commands(app: tauri::AppHandle) {
-    app.emit("connection-state-changed", "initialized");
-}
-
-fn main() {
-    tauri::Builder::default()
-        .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![
-            connect_auth,
-            connect_game,
-            get_connection_state,
-            disconnect,
-            send_game_message,
-            register_commands
-        ])
-        .setup(|app| {
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                let _ = handle.emit("client-ready", "DreamFus client backend initialized");
-            });
-            Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .collect();
+    
+    Ok(CharacterDisplayData {
+        sprites: result.sprites,
+        images,
+        breed_texture: None,
+    })
+}
+
+/// Get all sprite names from an A2D file
+pub async fn get_a2d_sprites_command(path: String) -> Result<Vec<String>, String> {
+    use crate::a2d::parse_a2dz_file;
+    
+    let a2d1 = parse_a2dz_file(&path).map_err(|e| e.to_string())?;
+    Ok(a2d1.sprites.iter().map(|s| s.name.clone()).collect())
+}
+
+/// Check if an A2D file exists and get its header
+pub async fn check_a2d_file_command(path: String) -> Result<serde_json::Value, String> {
+    use crate::a2d::read_a2dz_header;
+    use serde_json::json;
+    
+    if std::path::Path::new(&path).exists() {
+        let metadata = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+        if let Ok(header) = read_a2dz_header(&path) {
+            Ok(json!({
+                "exists": true,
+                "size": metadata.len(),
+                "magic": String::from_utf8_lossy(&header.magic).to_string(),
+                "version_byte": format!("0x{:02x}", header.version_byte)
+            }))
+        } else {
+            Ok(json!({
+                "exists": true,
+                "size": metadata.len(),
+                "error": "Failed to read header"
+            }))
+        }
+    } else {
+        Ok(json!({
+            "exists": false
+        }))
+    }
 }

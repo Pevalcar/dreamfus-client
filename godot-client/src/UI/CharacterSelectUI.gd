@@ -7,6 +7,7 @@ extends Control
 
 signal back_to_launcher
 signal character_selected(character_id: int, character_name: String)
+signal character_detail_confirmed(character_id: int, character_name: String)
 
 # Ruta a assets de emblems (razas) - Temporalmente desde Alea
 # Cuando se cree la copia DreamFus, cambiar a: "../DreamFus/"
@@ -43,6 +44,9 @@ var _characters: Array = Array()
 @onready var create_button: Button = $VBoxContainer/BottomPanel/CreateButton
 @onready var back_button: Button = $VBoxContainer/BottomPanel/BackButton
 
+# Referencia al CharacterDetailPanel (panel de detalles del personaje)
+@onready var detail_panel: PanelContainer = $VBoxContainer/HBoxContainer/CharacterDetailPanel
+
 # Referencia a la escena CharacterButton (instancia para cada personaje)
 const CHARACTER_BUTTON_SCENE := preload("uid://buc7isx7s1hjh")
 
@@ -75,6 +79,12 @@ func _connect_signals() -> void:
 		back_button.pressed.connect(_on_back_pressed)
 	if create_button != null:
 		create_button.pressed.connect(_on_create_pressed)
+
+	# Conectar señales del CharacterDetailPanel
+	if detail_panel != null:
+		detail_panel.confirmed.connect(_on_detail_confirmed)
+		detail_panel.cancelled.connect(_on_detail_cancelled)
+		detail_panel.delete_requested.connect(_on_detail_delete_requested)
 
 
 func _on_auth_completed(account_id: int, servers_json: String) -> void:
@@ -141,8 +151,8 @@ func _get_breed_emblem(breed: int) -> Texture2D:
 		return null
 
 	# Convertir breed (1-16) a número de archivo (10, 20, 30...)
-	var file_num = breed * 10
-	var emblem_path = GAME_ASSETS_BASE_PATH + "d3picto/hint/%d.png" % file_num
+	var file_num: int = breed * 10
+	var emblem_path: String = GAME_ASSETS_BASE_PATH + "d3picto/hint/%d.png" % file_num
 
 	if ResourceLoader.exists(emblem_path):
 		return load(emblem_path)
@@ -199,8 +209,22 @@ func _get_breed_symbol(breed: int) -> String:
 func _on_character_button_pressed(character_slot: CharacterSlot) -> void:
 	print("[CharacterSelectUI] Personaje seleccionado: %s (ID: %d)" % [character_slot.character_name, character_slot.character_id])
 	
-	# Emitir señal directamente (Main la captura y llama a GameManager)
-	character_selected.emit(character_slot.character_id, character_slot.character_name)
+	# Mostrar detalles del personaje en el panel antes de confirmar
+	if detail_panel != null:
+		# Obtener datos completos del personaje
+		var char_data := {
+			"id": character_slot.character_id,
+			"name": character_slot.character_name,
+			"level": character_slot.character_level,
+			"breed": character_slot.character_breed,
+			"sex": 0,  # Placeholder - se obtendrá del servidor
+			"experience": 0,  # Placeholder - se obtendrá del servidor
+			"stats": []  # Placeholder - se obtendrá del servidor
+		}
+		detail_panel.show_character(char_data)
+	else:
+		# Fallback: emitir directamente si el panel no existe
+		character_selected.emit(character_slot.character_id, character_slot.character_name)
 
 
 func _on_back_pressed() -> void:
@@ -218,3 +242,33 @@ func _on_error_received(error_code: String, error_message: String) -> void:
 		server_label.text = "Error: %s" % error_message
 	if title_label != null:
 		title_label.text = "Error de conexión"
+
+
+# --- Manejadores del CharacterDetailPanel ---
+
+func _on_detail_confirmed(character_id: int, character_name: String) -> void:
+	"""Confirmado por el jugador - enviar al servidor la selección del personaje."""
+	print("[CharacterSelectUI] Selección confirmada: %s (ID: %d)" % [character_name, character_id])
+	
+	# Ocultar el panel de detalles
+	if detail_panel != null:
+		detail_panel.hide_panel()
+	
+	# Emitir señal para que Main la maneje
+	character_selected.emit(character_id, character_name)
+
+
+func _on_detail_cancelled() -> void:
+	"""Cancelado por el jugador - volver a la lista."""
+	print("[CharacterSelectUI] Selección cancelada")
+	
+	if detail_panel != null:
+		detail_panel.hide_panel()
+
+
+func _on_detail_delete_requested(character_id: int, character_name: String) -> void:
+	"""Solicitud de eliminación de personaje."""
+	print("[CharacterSelectUI] Solicitud de borrar personaje: %s (ID: %d)" % [character_name, character_id])
+	# Placeholder - en producción abriría diálogo de confirmación
+	if detail_panel != null:
+		detail_panel.hide_panel()

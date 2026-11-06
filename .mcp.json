@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "godot-mcp-toolkit": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@npgamedev/godot-mcp-server@1.1.2"],
+      "cwd": "C:\\Users\\pevalcar\\Proyectos\\jondo-servidor\\DofusClient\\godot-client",
+      "description": "Godot MCP Server - Allows AI coding assistants to interact with Godot editor"
+    }
+  }
+}

@@ -55,5 +55,6 @@ layout_mode = 2
 text = "Seleccionar"
 
 [node name="BreedLabel" type="Label" parent="HUDContainer" unique_id=1151995107]
-custom_minimum_size = Vector2(40, 0)
 layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Clase"

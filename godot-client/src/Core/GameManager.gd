@@ -45,6 +45,7 @@ var _game_client: GameClient = null
 var _characters_list: Array = []
 var _in_welcome_burst: bool = false
 var _welcome_burst_started: bool = false
+var _server_selection_received: bool = false
 
 
 func _enter_tree() -> void:
@@ -241,8 +242,11 @@ func _on_auth_response_received(
 			var server: ServerInfo = ServerInfo.from_json(server_dict)
 			available_servers.append(server)
 
-		print("[GameManager] Auth exitoso. AccountId: %d, servidores: %d" % [account_id, available_servers.size()])
-		auth_completed.emit(account_id, JSON.stringify(servers_array) )
+		print(
+			"[GameManager] Auth exitoso. AccountId: %d, servidores: %d"
+			% [account_id, available_servers.size()]
+		)
+		auth_completed.emit(account_id, JSON.stringify(servers_array))
 
 		# Seleccionar primer servidor disponible
 		if available_servers.size() > 0:
@@ -341,8 +345,11 @@ func _on_game_client_message_received(
 			_:
 				pass # Otros mensajes durante el burst
 	else:
-		# Ya estamos en el juego
+		# Ya estamos en el juego - manejar respuesta de selección de personaje
 		match opcode:
+			"kva":
+				# Respuesta del servidor con identidad del personaje seleccionado
+				_handle_kva_response(payload)
 			"hpd":
 				# Personaje cargado, empezar partida
 				print("[GameManager] hpd recibido - personaje cargado")
@@ -355,11 +362,35 @@ func _handle_kvi_characters(payload: PackedByteArray) -> void:
 	# Parsear payload de kvi usando decodificador protobuf
 	# El payload es una secuencia de caracteres en formato protobuf, no JSON
 	_characters_list = Proto.decode_kvi(payload)
-	
+
 	if _characters_list.size() > 0:
 		print("[GameManager] kvi: recibidos %d personajes" % _characters_list.size())
 	else:
 		print("[GameManager] kvi: lista vacía de personajes")
+
+
+func _handle_kva_response(payload: PackedByteArray) -> void:
+	"""
+	Manages the kva (character selection response) opcode.
+	Formato: f1 (varint) = character_id
+	
+	Server sends kva after receiving kvw, confirming the character selection.
+	This triggers the next step in the connection flow.
+	"""
+	print("[GameManager] kva recibido - respuesta de selección de personaje")
+
+	# Parsear el payload para obtener el character_id
+	var fields: Array = Proto.parse(payload)
+	var char_id_field: Dictionary = Proto.first(fields, 1) as Dictionary
+
+	if char_id_field != null and char_id_field.has("v"):
+		var character_id: int = int(char_id_field["v"])
+		print("[GameManager] Personaje confirmado con ID: %d" % character_id)
+		_server_selection_received = true
+		# Emitir señal o continuar con el flujo según sea necesario
+	else:
+		printerr("[GameManager] kva malformado - no se pudo obtener character_id")
+		error_received.emit("PROTOCOL_ERROR", "kva malformado")
 
 
 func _on_connection_state_changed(connected: bool) -> void:
