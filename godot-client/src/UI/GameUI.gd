@@ -73,6 +73,9 @@ func _update_character_display() -> void:
 	if breed_label != null:
 		breed_label.text = "[%s]" % breed_name
 		breed_label.visible = true
+		# Ajustar tamaño de fuente a 12 para coincidir con otros labels del HUD
+		if breed_label.theme_override_font_sizes != null:
+			breed_label.theme_override_font_sizes.font_size = 12
 
 	# Salud
 	_update_health()

@@ -39,16 +39,17 @@ static func load_breed_emblem(breed: int) -> Texture2D:
 	)
 
 	# Validate path is within root (security check)
-	if not AssetPath.is_relative_to_root(emblem_path):
+	# Using begins_with() instead of is_relative_to_root() (not available in Godot 4.8)
+	if not emblem_path.begins_with(root):
 		return null
 
 	if not FileAccess.file_exists(emblem_path):
 		return null
 
+	# Load image using Image.load() (Godot 4.8 compatible)
 	var img: Image = Image.new()
-	var err: Error = OK
-	err = img.load_srgb_from_file(emblem_path)
-	if err != OK:
+	img.load(emblem_path)
+	if img.is_empty():
 		return null
 
 	return ImageTexture.create_from_image(img)
@@ -112,14 +113,12 @@ func load_image(kind: int, id: String) -> Image:
 	if _image_cache.has(path):
 		return _image_cache[path]
 
-	# Load the image
+	# Load the image using Image.load() (Godot 4.8 compatible)
 	var img: Image = Image.new()
-	var err: Error = img.load_srgb_from_file(path)
-
-	if err != OK:
+	img.load(path)
+	if img.is_empty():
 		push_error(
-			"AssetCatalog.load_image: Failed to load image at "
-			+ path + " (error: " + str(err) + ")"
+			"AssetCatalog.load_image: Failed to load image at " + path
 		)
 		return null
 
