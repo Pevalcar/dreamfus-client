@@ -12,6 +12,10 @@ rust-version = "1.69"
 name = "dreamfus_client"
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "dreamfus-client"
+path = "src-tauri/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2" }
 
@@ -23,6 +27,10 @@ futures-util = { version = "0.3", default-features = false, features = ["sink"] 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hex = "0.4"
+flate2 = "1.0"
+image = { version = "0.25", default-features = false, features = ["webp"] }
+thiserror = "2.0"
+base64 = "0.22"
 
 [profile.release]
 opt-level = 2

@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dby4ej03jgu2m" path="res://src/UI/CharacterSelectUI.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://c5fuxlxoa8thm" path="res://icon.svg" id="2_rpq25"]
+[ext_resource type="Script" uid="uid://char_detail_panel" path="res://src/UI/CharacterDetailPanel.gd" id="3_char_detail"]
 
 [node name="CharacterSelectUI" type="Control" unique_id=610510199]
 layout_mode = 3
@@ -49,6 +50,7 @@ layout_mode = 2
 [node name="CharacterDetailPanel" type="PanelContainer" parent="VBoxContainer/HBoxContainer" unique_id=1915657913]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
+script = ExtResource("3_char_detail")
 
 [node name="TextureRect" type="TextureRect" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel" unique_id=1997010464]
 layout_mode = 2
@@ -113,7 +115,7 @@ text = "SelectButton "
 [node name="DeleteButton" type="Button" parent="VBoxContainer/HBoxContainer/CharacterDetailPanel/VBoxContainer/ActionButtons" unique_id=1259372769]
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
-text = "DeleteButton "
+text = "DeleteButton"
 
 [node name="BottomPanel" type="HBoxContainer" parent="VBoxContainer" unique_id=1396689135]
 layout_mode = 2
@@ -123,6 +125,6 @@ alignment = 1
 layout_mode = 2
 text = "Crear Personaje"
 
-[node name="BackButton" type="Button" parent="VBoxContainer/BottomPanel" unique_id=104380902]
+[node name="BackButton" type="Button" parent="VBoxContainer/BottomPanel" unique_id=10480902]
 layout_mode = 2
 text = "Volver"

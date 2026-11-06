@@ -23,6 +23,27 @@ This project works with two external components:
 - Godot Engine 4.8+ (GDScript project)
 - No C#/Tauri/TypeScript in this repository - those belong to separate projects
 
+### Installing Godot MCP Toolkit (Recommended for Development)
+
+For enhanced code navigation and analysis, install the Godot MCP Toolkit:
+
+```bash
+# Install via npm (global)
+npm install -g @npgamedev/godot-mcp-server@1.1.2
+
+# Or install via npx (local to project)
+npx @npgamedev/godot-mcp-server@1.1.2
+```
+
+**Features provided by MCP:**
+- Symbol searching (`search_graph`)
+- Code tracing (`trace_path`)
+- Architecture queries (`get_architecture`)
+- Coverage verification (`check_index_coverage`)
+- Real-time codebase memory
+
+**Configuration:** The MCP server reads from `.mcp.json` in the project root.
+
 ---
 
 ## 📋 Development Workflow
@@ -272,8 +293,10 @@ Before submitting a PR, ensure:
 
 - Protocol Documentation: `docs/SIMPLE-PROTOCOL-HOOKS.md`
 - UI Guidelines: `docs/UI-CLIENTE.md`
+- Deflate Solution: `docs/DEFLATE_SOLUTION.md`
 - Server (JondoEmu): https://github.com/Keka-Bron/JondoEmu
 - Alea Client Download: https://aleaonline.com/download
+- Godot MCP Toolkit: `npm install -g @npgamedev/godot-mcp-server@1.1.2`
 
 ---
 
