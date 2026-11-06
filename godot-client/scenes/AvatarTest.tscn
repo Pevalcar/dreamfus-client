@@ -1,0 +1,40 @@
+[gd_scene format=3 uid="uid://b56fwuwsfo2kv"]
+
+[ext_resource type="Script" uid="uid://c1lne0v2o8ot7" path="res://src/Scenes/AvatarTest.gd" id="1"]
+
+[node name="AvatarTest" type="Control" unique_id=366660782]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=50104433]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer" unique_id=2057265558]
+layout_mode = 2
+text = "Avatar Renderer - Prueba de Assets Dofus"
+autowrap_mode = 6
+
+[node name="InstructionsLabel" type="Label" parent="VBoxContainer" unique_id=1187393026]
+layout_mode = 2
+text = "Selecciona una raza y haz click en 'Generar Avatar'"
+autowrap_mode = 6
+
+[node name="BreedSelector" type="OptionButton" parent="VBoxContainer" unique_id=1989272440]
+layout_mode = 2
+
+[node name="TestButton" type="Button" parent="VBoxContainer" unique_id=1291054244]
+layout_mode = 2
+text = "Generar Avatar"
+
+[node name="AvatarDisplay" type="Node2D" parent="VBoxContainer" unique_id=224647784]
+z_index = 1
+position = Vector2(376, 290)
+
+[node name="DebugOutput" type="TextEdit" parent="VBoxContainer" unique_id=1065127446]
+custom_minimum_size = Vector2(300, 100)
+layout_mode = 2
+size_flags_vertical = 4
+editable = false

@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://avatarsprite_scene"]
+
+[ext_resource type="Script" uid="uid://gd_avatar_sprite" path="res://src/UI/AvatarSprite.gd" id="1"]
+
+[node name="AvatarSprite" type="Node2D"]
+script = ExtResource("1")
+
+[node name="AvatarContainer" type="Node2D" parent="."]

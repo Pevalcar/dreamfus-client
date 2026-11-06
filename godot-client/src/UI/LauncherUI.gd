@@ -165,13 +165,14 @@ func _on_http_request_completed(
 		return
 
 	var json_raw: String = body.get_string_from_utf8()
-	var parsed: Variant = JSON.parse_string(json_raw)
-	if parsed == null:
+	var json = JSON.new()
+	var parse_result = json.parse(json_raw)
+	if parse_result != Error.OK:
 		status_label.text = "Respuesta inválida del servidor"
 		print("[LauncherUI] Estado: %s" % status_label.text)
 		return
-
-	var resp: Dictionary = parsed as Dictionary
+	
+	var resp: Dictionary = json.get_data() as Dictionary
 
 	if not (resp as Dictionary).get("bien", false):
 		var motivo: String = (resp as Dictionary).get("motivo", "Error desconocido") as String

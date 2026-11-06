@@ -1,7 +1,11 @@
 ## Protobuf utilities for the game protocol (TCP 5555)
 ## Implements VarInt encoding/decoding, field parsing, and envelope building.
+## Compatible with Godot 4.8 (uses ByteArrayExtensions for byte array operations)
 class_name Proto
 extends RefCounted
+
+## Preload ByteArrayExtensions helper para Godot 4.8
+const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
 
 # Wire types
 const WIRE_VARINT = 0
@@ -101,17 +105,17 @@ static func parse(buf: PackedByteArray) -> Array:
 				fields.append({ "n": n, "w": w, "v": r[0] })
 				i = r[1]
 			WIRE_FIXED64:
-				fields.append({ "n": n, "w": w, "b": buf.slice(i, i + 8) })
+				fields.append({ "n": n, "w": w, "b": ByteArrayExtensions.byte_subarray(buf, i, 8) })
 				i += 8
 			WIRE_LENGTH_DELIMITED:
 				var l: Array = read_varint(buf, i)
 				if l[0] == null:
 					break
 				i = l[1]
-				fields.append({ "n": n, "w": w, "b": buf.slice(i, i + l[0]) })
+				fields.append({ "n": n, "w": w, "b": ByteArrayExtensions.byte_subarray(buf, i, l[0]) })
 				i += l[0]
 			WIRE_FIXED32:
-				fields.append({ "n": n, "w": w, "b": buf.slice(i, i + 4) })
+				fields.append({ "n": n, "w": w, "b": ByteArrayExtensions.byte_subarray(buf, i, 4) })
 				i += 4
 			_:
 				break # unknown wire type

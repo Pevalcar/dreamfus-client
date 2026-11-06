@@ -4,6 +4,9 @@
 class_name GameClient
 extends Node
 
+## Preload ByteArrayExtensions helper para Godot 4.8
+const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
+
 signal connected
 signal disconnected
 signal message_received(opcode: String, payload: PackedByteArray, request_id: int)
@@ -247,8 +250,8 @@ func _drain_buffer() -> void:
 			)
 			return # esperar más datos
 
-		var frame: PackedByteArray = buffer.slice(end, end + size)
-		buffer = buffer.slice(end + size)
+		var frame: PackedByteArray = ByteArrayExtensions.byte_subarray(buffer, end, size)
+		buffer = ByteArrayExtensions.byte_subarray_from(buffer, end + size)
 		frames_parsed += 1
 
 		# Aumentar límite para permitir batch completo del welcome burst (hasta 20 frames)

@@ -1,317 +1,551 @@
-## A2DParser.gd
-## Parser para el formato A2D.Z (Ankama Animated Display)
+## A2DParser.gd - Parser para el formato A2D.Z (Ankama Animated Display)
 ## 
-## Formato: A2DZ → A2D1 → WebP images
-## Usado para renderizar avatares de personajes en Dofus/DreamFus
-##
-## Referencias:
-## - src/a2d/mod.rs (Rust reference implementation)
-## - A2D_FLOW.md (documentación del formato)
-##
-## NOTA: Este parser implementa el esqueleto del formato. La parseación completa
-## de sprites y la extracción de WebP requiere ajustes según el análisis real
-## de los archivos de juego.
+## LIMITACIÓN CONOCIDA Godot 4.8:
+## PackedByteArray.decompress() NO soporta raw deflate (formato usado por A2D.Z)
+## Solución: Usar JSON pre-procesado generado por scripts Python
+## 
+## Uso alternativo:
+## - Scripts: scripts/generate_a2d_json.py
+## - JSON: gen/a2d/{id}-1-static.json
+## - Documentación: docs/A2D_RAW_DEFLATE_WORKAROUND.md
 
 extends RefCounted
 class_name A2DParser
 
+## Preload ByteArrayExtensions helper para Godot 4.8
+const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
+
 ## Constantes del formato A2D.Z
-const MAGIC_A2DZ: PackedStringArray = ["A", "2", "D", "Z"]
-const MAGIC_A2D1: PackedStringArray = ["A", "2", "D", "1"]
-const WEBP_RIFF: String = "RIFF"
-const WEBP_WEBP: String = "WEBP"
+const MAGIC_A2DZ = "A2DZ"
+const MAGIC_A2D1 = "A2D1"
 
-## Tamaño máximo de archivo (8MB como en el parser Rust)
-const MAX_FILE_SIZE: int = 8 * 1024 * 1024
-
-## Resultado del parsing
-class_name A2DParseResult
-extends RefCounted
-var sprites: Array = []  # [{"name": String, "offset": int, "size": int}]
-var images: Array = []   # [{"sprite_name": String, "width": int, "height": int, "data": PackedByteArray}]
-var error: String = ""
-
-## Header de A2DZ
-class_name A2DZHeader
-extends RefCounted
-var magic: PackedStringArray = []
-var version_byte: int = 0
-
-## Header de A2D1
-class_name A2D1Header
-extends RefCounted
-var magic: PackedStringArray = []
-var version: int = 0
-
-# =============================================================================
-# API Principal
-# =============================================================================
+## Tamaño máximo de archivo (8MB)
+const MAX_FILE_SIZE = 8 * 1024 * 1024
 
 ## Parsea un archivo A2D.Z desde una ruta
-static func parse_file(path: String) -> A2DParseResult:
-	var result := A2DParseResult.new()
-	
+func parse_file(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
-		result.error = "File not found: %s".format([path])
-		return result
+		push_error("A2DParser: File not found: " + path)
+		return {}
 	
-	var file := FileAccess.open(path, FileAccess.READ)
+	var file = FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		result.error = "Failed to open file: %s".format([path])
-		return result
+		push_error("A2DParser: Failed to open file: " + path)
+		return {}
 	
-	# Leer todo el archivo
-	var data := file.get_buffer(file.get_length())
+	var data = file.get_buffer(file.get_length())
 	file.close()
 	
 	return parse_bytes(data)
 
 ## Parsea datos A2D.Z desde un PackedByteArray
-static func parse_bytes(data: PackedByteArray) -> A2DParseResult:
-	var result := A2DParseResult.new()
-	
+func parse_bytes(data: PackedByteArray) -> Dictionary:
 	# Verificar tamaño máximo
 	if data.size() > MAX_FILE_SIZE:
-		result.error = "File too large: %d bytes (max: %d)".format([data.size(), MAX_FILE_SIZE])
-		return result
+		push_error("A2DParser: File too large: %d bytes" % data.size())
+		return {}
 	
 	# Parsear header A2DZ
-	var header_result := _parse_a2dz_header(data)
-	if header_result.error != "":
-		result.error = header_result.error
-		return result
-	
-	# Descomprimir
-	var decompressed := _decompress_a2dz(data)
-	if decompressed == null or decompressed.size() == 0:
-		result.error = "Decompression failed"
-		return result
-	
-	# Parsear header A2D1
-	var a2d1_header_result := _parse_a2d1_header(decompressed)
-	if a2d1_header_result.error != "":
-		result.error = a2d1_header_result.error
-		return result
-	
-	# Extraer sprites e imágenes
-	result.sprites = _extract_sprites(decompressed)
-	result.images = _extract_webp_images(decompressed)
-	
-	return result
-
-# =============================================================================
-# Parsing Headers
-# =============================================================================
-
-## Parsea y valida el header A2DZ sin descomprimir
-static func _parse_a2dz_header(data: PackedByteArray) -> A2DZHeader:
-	var result := A2DZHeader.new()
-	
 	if data.size() < 8:
-		result.magic = []
-		return result
+		push_error("A2DParser: Data too short")
+		return {}
 	
-	# Verificar magic "A2DZ"
-	for i in range(4):
-		result.magic.append(char(data[i]))
+	# Descomprimir usando Zlib nativo de Godot 4
+	var decompressed = _decompress_a2dz(data)
+	if decompressed.is_empty():
+		push_error("A2DParser: Decompression failed")
+		return {}
 	
-	if result.magic != MAGIC_A2DZ:
-		result.error = "Invalid magic: expected A2DZ, got %s".format([result.magic.join("")])
-		return result
+	# Verificar header A2D1
+	var a2d1_magic = ByteArrayExtensions.peek_string_4(decompressed, 0)
+	if a2d1_magic != MAGIC_A2D1:
+		push_error("A2DParser: Invalid A2D1 magic")
+		return {}
 	
-	# Versión
-	result.version_byte = data[4]
+	# Parsear versión A2D1
+	var reader = A2DReader.new(decompressed)
+	var version = reader.read_u16()
 	
-	return result
+	if version != 1:
+		push_error("A2DParser: Unsupported version: %d" % version)
+		return {}
+	
+	# Parsear flags
+	var a2d_flags = reader.read_u16()
+	
+	# Leer tabla de strings
+	var strings = _read_string_table(reader)
+	
+	# Parsear vértices
+	var vertex_count = reader.read_u32()
+	var positions = []
+	var uvs = []
+	var i = 0
+	while i < vertex_count:
+		positions.append(reader.read_f32())  # x
+		positions.append(reader.read_f32())  # y
+		uvs.append(reader.read_u16())
+		uvs.append(reader.read_u16())
+		i += 1
+	reader.align(4)
+	
+	var colors_buffer = reader.read_bytes(vertex_count)
+	reader.align(4)
+	
+	# Leer índices
+	var index_count = reader.read_u32()
+	var indices = reader.read_u16_array(index_count)
+	reader.align(4)
+	
+	# Leer gráficos (parts)
+	var n_parts = reader.read_u32()
+	var parts = {}
+	i = 0
+	while i < n_parts:
+		var graphic = _read_graphic(reader, strings)
+		if graphic.has("key") and graphic.key != -1:
+			parts[graphic.key] = graphic
+		i += 1
+	
+	# Leer referencias
+	var referenced = _read_string_list(reader, strings)
+	var empty_customisations = _read_string_list(reader, strings)
+	
+	# Leer definición/animación si está presente
+	var definition = {}
+	var animations = {}
+	
+	if (flags & 1) != 0:
+		var frame_rate = reader.read_u32()
+		var max_node_count = reader.read_u32()
+		var exposed = _read_string_list(reader, strings)
+		
+		var n_graphics = reader.read_u32()
+		var def_graphics = []
+		i = 0
+		while i < n_graphics:
+			def_graphics.append(_read_graphic(reader, strings))
+			i += 1
+		
+		var n_anims = reader.read_u32()
+		i = 0
+		while i < n_anims:
+			var anim_name = strings[reader.read_u32()] if reader.read_u32() < strings.size() else ("anim_" + str(i))
+			reader.seek(reader.position - 4)
+			var name_idx = reader.read_u32()
+			var bounds = reader.read_float_array(4)
+			var offset = reader.read_u32()
+			var length = reader.read_u32()
+			
+			if name_idx < strings.size():
+				animations[strings[name_idx]] = {
+					"name": strings[name_idx],
+					"bounds": bounds,
+					"offset": offset,
+					"length": length
+				}
+			i += 1
+		
+		definition = {
+			"frame_rate": frame_rate,
+			"max_node_count": max_node_count,
+			"exposed_node_names": exposed,
+			"graphics": def_graphics,
+			"animations": animations
+		}
+	
+	# Leer blob de animación
+	var blob_len = reader.read_u32()
+	var blob = reader.read_bytes(blob_len)
+	
+	# Parsear animaciones del blob
+	if not animations.is_empty() and blob.size() > 0:
+		var anim_reader = A2DReader.new(blob)
+		for key in animations.keys():
+			var anim = animations[key]
+			if anim.offset + anim.length <= blob.size():
+				anim.data = _byte_subarray(blob, anim.offset, anim.length)
+	
+	# Leer texturas
+	var n_textures = reader.read_u32()
+	var textures = []
+	i = 0
+	while i < n_textures:
+		var kind_byte = reader.read_u8()
+		reader.read_u8()  # padding
+		var width = reader.read_u16()
+		var height = reader.read_u16()
+		reader.read_u16()  # padding
+		var b_len = reader.read_u32()
+		var t_bytes = reader.read_bytes(b_len)
+		reader.align(4)
+		
+		textures.append({
+			"kind": kind_byte == 1 ? "webp" : "png",
+			"width": width,
+			"height": height,
+			"bytes": t_bytes
+		})
+		i += 1
+	
+	return {
+		"version": version,
+		"flags": flags,
+		"strings": strings,
+		"vertex_count": vertex_count,
+		"positions": positions,
+		"uvs": uvs,
+		"colors": colors_buffer,
+		"indices": indices,
+		"parts": parts,
+		"referenced": referenced,
+		"empty_customisations": empty_customisations,
+		"definition": definition,
+		"textures": textures
+	}
 
-## Parsea el header A2D1 después de descompresión
-static func _parse_a2d1_header(data: PackedByteArray) -> A2D1Header:
-	var result := A2D1Header.new()
-	
+## Descompresión Raw Deflate (formato A2DZ de Dofus)
+## El archivo A2DZ usa raw deflate (no zlib estándar con header)
+## NOTA: Godot 4.8 PackedByteArray.decompress() NO soporta raw deflate
+## Solución: Verificar si existe JSON pre-procesado y usarlo
+func _decompress_a2dz(data: PackedByteArray) -> PackedByteArray:
 	if data.size() < 8:
-		result.error = "Data too short for A2D1 header"
-		return result
-	
-	# Verificar magic "A2D1"
-	for i in range(4):
-		result.magic.append(char(data[i]))
-	
-	if result.magic != MAGIC_A2D1:
-		result.error = "Invalid magic: expected A2D1, got %s".format([result.magic.join("")])
-		return result
-	
-	# Versión (u32 little-endian)
-	result.version = Bytes.get_u32_le(data, 4)
-	
-	return result
-
-# =============================================================================
-# Decompression
-# =============================================================================
-
-## Descomprime datos A2DZ usando zlib/deflate
-## Godot tiene soporte nativo para zlib en el núcleo
-static func _decompress_a2dz(data: PackedByteArray) -> PackedByteArray:
-	# Header A2DZ: 8 bytes (magic 4 + version 1 + padding 3)
-	if data.size() < 8:
-		return []
+		return PackedByteArray()
 	
 	# Datos comprimidos empiezan en offset 8
-	var compressed_data: PackedByteArray = data.slice(8)
+	var compressed = ByteArrayExtensions.byte_subarray_from(data, 8)
 	
-	# Usar MathDeflate de Godot para descomprimir
-	# NOTA: Godot 4.8 usa zlib, no raw deflate
-	# Necesitamos agregar un header zlib o usar una extensión
+	if compressed.is_empty():
+		return PackedByteArray()
 	
-	return _zlib_decompress(compressed_data)
-
-## Descompresión zlib (wrapper para compatibilidad)
-static func _zlib_decompress(data: PackedByteArray) -> PackedByteArray:
-	# Godot no tiene una API directa para zlib en GDScript
-	# Necesitaríamos usar un GDExtension o pre-procesar los archivos
+	# ISSUE: Godot 4.8 PackedByteArray.decompress(comp_size, comp_type) no funciona
+	# con raw deflate ( necesario para A2DZ de Dofus)
 	#
-	# Alternativa: usar FileAccess.open_with_compressed() si disponible
-	# o implementar un pequeño wrapper C++ que use zlib
+	# El archivo A2DZ contiene raw deflate (wbits=-15 en zlib)
+	# Godot espera datos zlib estándar con header de 2 bytes (0x78)
+	#
+	# Solución: Verificar si existe JSON pre-procesado
+	# El archivo bones_id se establece externamente al parser
 	
-	# Por ahora, retornar datos vacíos y documentar esta limitación
-	push_error("A2DParser: Zlib decompression not directly available in GDScript. Consider using a GDExtension or pre-processing files.")
-	return []
+	# Este método retorna empty para forzar uso de WebP fallback
+	# Para usar JSON pre-procesado, llamar a _load_json_avatars() directamente
+	push_error("A2DParser: Raw deflate not supported in Godot 4.8. Use pre-processed JSON or WebP fallback.")
+	return PackedByteArray()
 
-# =============================================================================
-# Sprite and Image Extraction
-# =============================================================================
+## Carga datos de un archivo A2D desde JSON pre-procesado
+## SOLUCIÓN: Los scripts Python generan JSON que Godot puede leer sin descompresión
+func load_from_json(json_path: String) -> Dictionary:
+	if not FileAccess.file_exists(json_path):
+		push_error("A2DParser: JSON file not found: " + json_path)
+		return {}
+	
+	var file = FileAccess.open(json_path, FileAccess.READ)
+	if file == null:
+		push_error("A2DParser: Failed to open JSON: " + json_path)
+		return {}
+	
+	var json_text = file.get_as_text()
+	file.close()
+	
+	var json = JSON.new()
+	var parse_result = json.parse(json_text)
+	if parse_result != Error.OK:
+		push_error("A2DParser: Failed to parse JSON: " + str(parse_result))
+		return {}
+	
+	return json.get_data()
 
-## Extrae información de sprites del A2D1 parsing
-static func _extract_sprites(data: PackedByteArray) -> Array:
-	var sprites: Array = []
-	
-	if data.size() < 8:
-		return sprites
-	
-	# El formato de sprite varía según el versión y el análisis del juego
-	# Este es un esqueleto básico que debe ser rellenado con datos reales
-	
-	# Buscar patrones de sprite en los datos
-	# Los sprites de Dofus suelen tener estructuras específicas
-	
-	return sprites
+## Lee tabla de strings
+func _read_string_table(reader: A2DReader) -> Array[String]:
+	var count = reader.read_u32()
+	var strings: Array[String] = []
+	var i = 0
+	while i < count:
+		var slen = reader.read_u16()
+		var sbytes = reader.read_bytes(slen)
+		strings.append(sbytes.get_string_from_utf8())
+		i += 1
+	reader.align(4)
+	return strings
 
-## Extrae imágenes WebP de los datos A2D1
-static func _extract_webp_images(data: PackedByteArray) -> Array:
-	var images: Array = []
-	
-	# Buscar firmas RIFF...WEBP
-	var offset := 8  # Saltar header A2D1 + versión
-	var image_index := 0
-	
-	while offset + 12 <= data.size():
-		# Verificar si hay un contenedor WebP
-		if data[offset] == ord("R") and \
-		   data[offset + 1] == ord("I") and \
-		   data[offset + 2] == ord("F") and \
-		   data[offset + 3] == ord("F") and \
-		   offset + 8 < data.size() and \
-		   data[offset + 8] == ord("W") and \
-		   data[offset + 9] == ord("E") and \
-		   data[offset + 10] == ord("B") and \
-		   data[offset + 11] == ord("P"):
-			
-			# Leer tamaño del archivo WebP
-			var riff_size := Bytes.get_u32_le(data, offset + 4)
-			var webp_total_size := 12 + riff_size
-			
-			if offset + webp_total_size <= data.size():
-				var image_data := data.slice(offset, offset + webp_total_size)
-				var dimensions := _get_webp_dimensions(image_data)
-				
-				images.append({
-					"sprite_name": "sprite_%d".format([image_index]),
-					"width": dimensions.x,
-					"height": dimensions.y,
-					"data": image_data
-				})
-				
-				image_index += 1
-				offset += webp_total_size
-			else:
-				offset += 1
+## Lee lista de strings (referencias)
+func _read_string_list(reader: A2DReader, strings: Array) -> Array:
+	var count = reader.read_u32()
+	var list: Array = []
+	var i = 0
+	while i < count:
+		var idx = reader.read_u32()
+		if idx < strings.size():
+			list.append(strings[idx])
 		else:
-			offset += 1
-	
-	return images
+			list.append("")
+		i += 1
+	return list
 
-## Obtiene dimensiones de una imagen WebP
-static func _get_webp_dimensions(data: PackedByteArray) -> Vector2:
-	# WebP tiene dimensiones en los chunks VP8 o VP8L
-	# Este es un parser básico - puede necesitar ajustes
+## Lee un graphic/struct
+func _read_graphic(reader: A2DReader, strings: Array) -> Dictionary:
+	var name_idx = reader.read_u32()
+	var key = reader.read_u32()
+	var n_entries = reader.read_u32()
 	
-	if data.size() < 12:
-		return Vector2.ZERO
+	var entries = []
+	var i = 0
+	while i < n_entries:
+		var sym_id = reader.read_i32()
+		var e_count = reader.read_i32()
+		var mat = reader.read_float_array(6)
+		# Transform: [a, b, c, d, tx, ty] -> render [a, -b, -c, d, tx, -ty]
+		entries.append({
+			"symbol_id": sym_id,
+			"entries_count": e_count,
+			"matrix": [mat[0], -mat[1], -mat[2], mat[3], mat[4], -mat[5]]
+		})
+		i += 1
 	
-	# Saltar header RIFF...WEBP (12 bytes)
-	var offset := 12
+	var n_chunks = reader.read_u32()
+	var chunks = []
+	i = 0
+	while i < n_chunks:
+		chunks.append({
+			"start_vertex": reader.read_u32(),
+			"vertex_count": reader.read_u32(),
+			"start_index": reader.read_u32(),
+			"index_count": reader.read_u32(),
+			"texture": reader.read_u8(),
+			"mask": reader.read_u8()
+		})
+		reader.read_u16()  # padding
+		i += 1
 	
-	while offset + 8 <= data.size():
-		var chunk_type := data.subptr(offset, 4)
-		var chunk_size := Bytes.get_u32_le(data, offset + 4)
-		
-		# Verificar chunk VP8 (lossy)
-		if chunk_type[0] == ord("V") and \
-		   chunk_type[1] == ord("P") and \
-		   chunk_type[2] == ord("8") and \
-		   chunk_type[3] == ord(" "):
-			# Dimensiones en offset 0x12-0x17 (18-23)
-			if offset + 0x18 <= data.size():
-				var width := Bytes.get_u16_le(data, offset + 0x12) + 1
-				var height := Bytes.get_u16_le(data, offset + 0x16) + 1
-				return Vector2(width, height)
-		
-		# Verificar chunk VP8L (lossless)
-		if chunk_type[0] == ord("V") and \
-		   chunk_type[1] == ord("P") and \
-		   chunk_type[2] == ord("8") and \
-		   chunk_type[3] == ord("L"):
-			# Dimensiones en byte 6-7 del chunk
-			if offset + 10 <= data.size():
-				var features := Bytes.get_u32_le(data, offset + 6)
-				var w_hex := (features & 0x3FFF) as int
-				var h_hex := ((features >> 14) & 0x3FFF) as int
-				return Vector2(w_hex + 1, h_hex + 1)
-		
-		# Saltar al siguiente chunk
-		offset += 8 + chunk_size
-	
-	return Vector2.ZERO
+	return {
+		"name": strings[name_idx] if name_idx < strings.size() else ("graphic_" + str(key)),
+		"key": key,
+		"entries": entries,
+		"chunks": chunks
+	}
 
-# =============================================================================
-# Utility Functions for Godot
-# =============================================================================
-
-## Carga una imagen WebP desde datos brutejos
-static func load_webp_from_data(data: PackedByteArray) -> Image:
-	var image := Image.new()
+## Lee animación desde blob de datos
+func parse_animation_blob(data: PackedByteArray) -> Dictionary:
+	if data.size() < 8:
+		return {}
 	
-	# Godot 4.8 puede cargar WebP directamente con Image.load()
-	# pero necesita un archivo temporal o usar Image.load_from_buffer()
+	var reader = A2DReader.new(data)
+	var frame_count = reader.read_u16()
+	var node_count = reader.read_u16()
+	var label_count = reader.read_u16()
 	
-	var temp_path := "res://temp_webp_cache_%d.webp".format([Time.get_ticks_msec()])
+	if frame_count == 0 or node_count == 0:
+		push_error("A2DParser: Empty timeline")
+		return {}
 	
-	# Guardar temporalmente
-	var file := FileAccess.open(temp_path, FileAccess.WRITE)
-	if file != null:
-		file.store_buffer(data)
-		file.close()
+	# Saltar 8 bytes
+	reader.seek(8)
+	
+	# Leer labels
+	var labels = []
+	var i = 0
+	while i < label_count:
+		var frame = reader.read_u16()
+		var vlen = reader.read_u8()
+		var l_bytes = reader.read_bytes(vlen)
+		labels.append({
+			"frame": frame,
+			"label": l_bytes.get_string_from_utf8()
+		})
+		i += 1
+	reader.align(2)
+	reader.align(4)
+	
+	# Leer offsets de frames
+	var offsets = []
+	i = 0
+	while i < frame_count:
+		offsets.append(reader.read_i32())
+		i += 1
+	
+	# Leer datos de frames
+	var nodes = {}
+	var frames = []
+	
+	i = 0
+	while i < frame_count:
+		reader.seek(offsets[i])
+		var row = []
+		var n = 0
+		while n < node_count:
+			var idx = reader.read_i16()
+			
+			if idx < 0 or idx >= node_count:
+				push_error("A2DParser: Node index out of range: " + str(idx))
+			
+			# Lee estado del nodo
+			var state = {
+				"node": idx,
+				"sprite_index": -1,
+				"customisation_index": -1,
+				"children_recursive_count": -1,
+				"opacity": 1.0,
+				"multiply": [],
+				"additive": [],
+				"matrix": [],
+				"mask_flags": 0,
+				"blend_mode": 0
+			}
+			
+			var flags = reader.read_u8()
+			if (flags & 2) != 0:
+				state.opacity = reader.read_u8() / 127.0
+			reader.align(4)
+			
+			if (flags & 33) != 0:
+				state.sprite_index = reader.read_i16()
+				state.customisation_index = reader.read_i16()
+				state.children_recursive_count = reader.read_i16()
+				reader.align(4)
+			
+			if (flags & 4) != 0:
+				state.multiply = [
+					reader.read_i8() / 127.0, reader.read_i8() / 127.0,
+					reader.read_i8() / 127.0, reader.read_i8() / 127.0
+				]
+			
+			if (flags & 8) != 0:
+				state.additive = [
+					reader.read_i8() / 127.0, reader.read_i8() / 127.0,
+					reader.read_i8() / 127.0, reader.read_i8() / 127.0
+				]
+			
+			if (flags & 16) != 0:
+				state.matrix = [
+					reader.read_f32(), reader.read_f32(), reader.read_f32(),
+					state.matrix.size() < 6 ? 0 : state.matrix[3],
+					reader.read_f32(), reader.read_f32()
+				]
+			
+			if (flags & 64) != 0:
+				state.mask_flags = reader.read_u8()
+				reader.seek(reader.position + 3)
+			
+			if (flags & 128) != 0:
+				var p = reader.read_u8()
+				state.blend_mode = reader.read_u8()
+				reader.seek(reader.position + 2)
+				if (p & 64) != 0:
+					reader.seek(reader.position + 80)
+				var sub_count = reader.read_u8()
+				var sc = 0
+				while sc < sub_count:
+					var fl = reader.read_u8()
+					reader.align(4)
+					if (fl & 1) != 0: reader.seek(reader.position + 32)
+					if (fl & 2) != 0: reader.seek(reader.position + 12)
+					if (fl & 4) != 0: reader.seek(reader.position + 24)
+					sc += 1
+				reader.align(4)
+			
+			nodes[idx] = state
+			row.append(state)
+			n += 1
 		
-		# Cargar con Image.load()
-		image.load(temp_path)
-		
-		# Limpiar archivo temporal
-		DirAccess.remove_absolute(temp_path)
+		frames.append(row)
+		i += 1
 	
-	return image
+	return {
+		"frame_count": frame_count,
+		"node_count": node_count,
+		"labels": labels,
+		"frames": frames
+	}
 
-## Convierte un PackedByteArray a Texture2D
-static func image_to_texture(img: Image) -> Texture2D:
-	if img == null or img.is_empty():
-		return null
-	return ImageTexture.create_from_image(img)
+## Helper class for binary reading
+class_name A2DReader
+
+var _buffer: PackedByteArray
+var _pos: int = 0
+
+func _init(buffer: PackedByteArray):
+	_buffer = buffer
+
+func get position() -> int:
+	return _pos
+
+func get length() -> int:
+	return _buffer.size()
+
+func need(n: int) -> void:
+	if _pos + n > _buffer.size():
+		push_error("A2DParser: Truncated read at %d (+ %d)" % [_pos, n])
+
+func read_u8() -> int:
+	need(1)
+	var v = _buffer[_pos]
+	_pos += 1
+	return v
+
+func read_i8() -> int:
+	need(1)
+	return int(_buffer[_pos]) - 128 if _buffer[_pos] > 127 else int(_buffer[_pos])
+
+func read_u16() -> int:
+	need(2)
+	var v = _buffer.get_u16(_pos)
+	_pos += 2
+	return v
+
+func read_i16() -> int:
+	need(2)
+	return int(_buffer.get_u16(_pos)) - 65536 if _buffer.get_u16(_pos) > 32767 else int(_buffer.get_u16(_pos))
+
+func read_u32() -> int:
+	need(4)
+	var v = _buffer.get_u32(_pos)
+	_pos += 4
+	return v
+
+func read_i32() -> int:
+	need(4)
+	var v = _buffer.get_u32(_pos)
+	_pos += 4
+	return int(v) - 4294967296 if v > 2147483647 else int(v)
+
+func read_f32() -> float:
+	need(4)
+	return _buffer.get_float(_pos)
+	_pos += 4
+
+func read_bytes(n: int) -> PackedByteArray:
+	need(n)
+	var result = ByteArrayExtensions.byte_subarray(_buffer, _pos, n)
+	_pos += n
+	return result
+
+func read_u16_array(count: int) -> Array:
+	var result = []
+	var i = 0
+	while i < count:
+		result.append(read_u16())
+		i += 1
+	return result
+
+func read_float_array(count: int) -> Array:
+	var result = []
+	var i = 0
+	while i < count:
+		result.append(read_f32())
+		i += 1
+	return result
+
+func align(alignment: int = 4) -> void:
+	_pos = int(float(_pos) / float(alignment)) * alignment
+
+func seek(pos: int) -> void:
+	_pos = pos
+
+func read_string_at(idx: int) -> String:
+	if idx < 0 or idx >= _buffer.size():
+		return ""
+	# Leer string desde idx hasta encontrar un byte nulo o fin de buffer
+	var end = idx
+	while end < _buffer.size() and _buffer[end] != 0:
+		end += 1
+	return ByteArrayExtensions.bytes_to_string_ascii(_buffer, idx, end - idx)
