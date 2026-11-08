@@ -1,16 +1,14 @@
 # Godot Engine
 /.import/
 *.import
-*.godot/
-*.import/
-
-# Godot import files (generated)
-*.import
-*.godot
 *.uid
 *.import.toml
 .godot/
 .import/
+
+# Godot mono cache
+.mono/
+*.mono
 
 # Mono
 *.csproj
