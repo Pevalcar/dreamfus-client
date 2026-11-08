@@ -1,0 +1,15 @@
+{
+  "productName": "DreamFus",
+  "version": "0.1.0",
+  "identifier": "com.dreamfus.client",
+  "build": {},
+  "app": {
+    "windows": [
+      {
+        "title": "DreamFus",
+        "width": 1280,
+        "height": 720
+      }
+    ]
+  }
+}

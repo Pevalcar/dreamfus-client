@@ -1,0 +1,63 @@
+# Godot Engine
+/.import/
+*.import
+*.godot/
+*.import/
+
+# Generated files
+*.import
+*.godot
+*.uid
+export_presets.cfg
+.editor/
+.editor-4/
+.godot/
+
+# Backup files
+*.backup
+*.import.toml
+
+# Mono
+*.csproj
+*.unity
+*.sln
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+
+# Node modules (for any frontend parts)
+node_modules/
+
+# Tauri/Rust
+dist/
+target/
+.godot/
+
+# Other
+godot-mcp-toolkit/
+
+# Secrets / API keys (don't commit these)
+*.secret
+*.key
+
+# Large asset files (if any)
+# You may want to add specific patterns for game assets
+# *.png
+# *.jpg
+# *.ogg
+
+# Logs
+*.log

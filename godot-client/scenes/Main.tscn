@@ -1,0 +1,26 @@
+[gd_version]
+
+major=4
+minor=8
+patch=0
+
+[doc]
+
+name="Main Scene"
+script=res://src/Core/GameClient.gd
+
+[node]
+
+name="Main"
+type="Node"
+parent=""
+
+[children]
+
+[node input_map]
+
+name=""
+
+[destroy]
+
+name=""
