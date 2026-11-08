@@ -3,6 +3,7 @@
 # Use preload("res://src/Utils/ByteArrayExtensions.gd") to access this script
 extends RefCounted
 
+
 # Extract a byte subarray from a PackedByteArray
 static func byte_subarray(ba: PackedByteArray, start: int, length: int) -> PackedByteArray:
 	if ba == null or start < 0 or length <= 0:
@@ -54,11 +55,20 @@ static func starts_with(ba: PackedByteArray, prefix: PackedByteArray) -> bool:
 static func to_hex(ba: PackedByteArray) -> String:
 	if ba == null:
 		return ""
-	return ba.hexify()
+	return ba.hex_encode()
 
 
 # Extract a portion of byte array without moving the reading position (peek)
-static func byte_subarray_from(ba: PackedByteArray, start: int, length: int) -> PackedByteArray:
+# If length is -1 (default), extracts from start to end of array
+static func byte_subarray_from(ba: PackedByteArray, start: int, length: int = -1) -> PackedByteArray:
+	if ba == null or start < 0 or start >= ba.size():
+		return PackedByteArray()
+	if length == -1:
+		# Extract from start to end of array
+		var result = PackedByteArray()
+		for i in range(start, ba.size()):
+			result.append(ba[i])
+		return result
 	return byte_subarray(ba, start, length)
 
 
@@ -68,7 +78,7 @@ static func peek_string_4(ba: PackedByteArray, pos: int) -> String:
 		return ""
 	var result := ""
 	for i in range(pos, pos + 4):
-		result += chr(ba[i])
+		result += char(ba[i])
 	return result
 
 
@@ -79,5 +89,5 @@ static func bytes_to_string_ascii(ba: PackedByteArray, start: int, length: int) 
 	var result := ""
 	var end = min(start + length, ba.size())
 	for i in range(start, end):
-		result += chr(ba[i])
+		result += char(ba[i])
 	return result
