@@ -1,7 +1,7 @@
 ## Protobuf utilities for the game protocol (TCP 5555)
 ## Implements VarInt encoding/decoding, field parsing, and envelope building.
 ## Compatible with Godot 4.8 (uses ByteArrayExtensions for byte array operations)
-class_name Proto
+# No class_name to avoid preload circular dependency issues in Godot 4.8 beta2
 extends RefCounted
 
 ## Preload ByteArrayExtensions helper para Godot 4.8

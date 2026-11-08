@@ -4,8 +4,9 @@
 class_name GameClient
 extends Node
 
-## Preload ByteArrayExtensions helper para Godot 4.8
+## Preload helpers para Godot 4.8
 const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
+const Proto = preload("res://src/Network/Proto.gd")
 
 signal connected
 signal disconnected
