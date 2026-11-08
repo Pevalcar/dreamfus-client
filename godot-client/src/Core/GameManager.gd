@@ -1,406 +1,165 @@
+# GameManager.gd - Manages game state and handles protocol messages
 class_name GameManager
-# @class GameManager
-# Administrador principal del juego
-# Gestiona el estado global, la conexión al servidor y la navegación entre pantallas
 extends Node
 
-signal game_state_changed(new_state: int)
-signal auth_completed(account_id: int, servers_json: String)
-signal character_selected(character_id: int, character_name: String)
-signal characters_received(characters: Array)
-signal error_received(error_code: String, error_message: String)
+## Protocol decoder
+const WorldProto = preload("res://src/Network/WorldProto.gd")
 
-enum GameState {
-	LAUNCHER = 0,
-	PLAYER_LOGIN = 1,
-	CHARACTER_SELECT = 2,
-	IN_GAME = 3,
-	ERROR = 4,
-}
+## Character data
+var current_character: CharacterData = null
 
-# Singleton
-static var instance: GameManager = null
+## Player state from Block 1 messages
+var player_stats: Dictionary = {}
+var player_jobs: Array = []
+var player_spells: Array = []
+var player_inventory: Dictionary = { "kamas": 0, "items": [] }
+var spell_bar: Dictionary = { "bar_type": 0, "shortcuts": [] }
 
-# Configuración
-@export var server_host: String = "127.0.0.1"
-@export var server_port: int = 5557
-@export var default_language: String = "es"
+## Player info from earlier messages
+var player_id: int = 0
+var player_name: String = ""
 
-var current_state: GameState = _current_state:
-	get:
-		return _current_state
-
-# Datos de la sesión
-var account_id: int = 0
-var available_servers: Array = []
-var selected_character: CharacterData = null
-# Estado del juego
-var _current_state: GameState = GameState.LAUNCHER
-
-# Referencias a clientes
-var _proto_client: SimpleProtocolClient = null
-var _game_client: GameClient = null
-
-# Welcome burst handling
-var _characters_list: Array = []
-var _in_welcome_burst: bool = false
-var _welcome_burst_started: bool = false
-var _server_selection_received: bool = false
+## Connection state
+var is_connected: bool = false
+var is_character_loaded: bool = false
 
 
-func _enter_tree() -> void:
-	if instance == null:
-		instance = self
-
-
+# Called when the node is added to the scene tree
 func _ready() -> void:
-	print("[GameManager] Inicializado")
-
-	# Singleton
-	if instance != null and instance != self:
-		printerr("[GameManager] Singleton ya existe! QueueFreeing...")
-		queue_free()
-		return
-
-
-func _exit_tree() -> void:
-	cleanup()
-
-
-func initialize(proto_client: SimpleProtocolClient, game_client: GameClient = null) -> void:
-	_proto_client = proto_client
-	_game_client = game_client
-
-	# Conectar señales del cliente WebSocket
-	proto_client.connection_state_changed.connect(_on_connection_state_changed)
-	proto_client.auth_response_received.connect(_on_auth_response_received)
-	proto_client.server_selection_response_received.connect(_on_server_selection_response_received)
-	proto_client.error_received.connect(_on_error_received)
-
-	# Conectar señales del cliente TCP (GameClient)
-	if _game_client != null:
-		_game_client.connected.connect(_on_game_client_connected)
-		_game_client.disconnected.connect(_on_game_client_disconnected)
-		_game_client.message_received.connect(_on_game_client_message_received)
-		_game_client.error_occurred.connect(_on_game_client_error)
-
-
-func change_state(new_state: GameState) -> void:
-	if _current_state == new_state:
-		return
-
-	print("[GameManager] Cambio de estado: %s -> %s" % [_current_state, new_state])
-	_current_state = new_state
-	game_state_changed.emit(new_state)
-
-
-# ============================================================
-# AUTENTICACIÓN
-# ============================================================
-func attempt_login(lang: String, token: String, install_id: String) -> void:
-	if _proto_client == null:
-		return
-
-	change_state(GameState.PLAYER_LOGIN)
-
-	# Conectar si no está conectado
-	if _proto_client.state == SimpleProtocolClient.ClientState.DISCONNECTED:
-		_proto_client.connect_to_server(server_host, server_port)
-
-		# Esperar a que el estado sea CONNECTED (polling explícito)
-		var wait_time: float = 0.0
-		var max_wait: float = 10.0 # Timeout de 10 segundos
-		while (
-			_proto_client.state != SimpleProtocolClient.ClientState.CONNECTED
-			and wait_time < max_wait
-		):
-			await get_tree().process_frame
-			wait_time += 0.016 # Aproximadamente 60 FPS
-
-		if _proto_client.state != SimpleProtocolClient.ClientState.CONNECTED:
-			printerr("[GameManager] Timeout esperando conexión WebSocket")
-			error_received.emit("CONNECTION_ERROR", "Timeout esperando conexión")
-			change_state(GameState.ERROR)
-			return
-
-		print("[GameManager] WebSocket conectado, enviando auth")
-
-	# Enviar solicitud de auth
-	_proto_client.send_auth_request(lang, token, install_id)
-
-
-# ============================================================
-# SELECCIÓN DE SERVIDOR
-# ============================================================
-func select_server(server_id: int) -> void:
-	if _proto_client == null:
-		return
-
-	print("[GameManager] Solicitando conexión al servidor %d" % server_id)
-	# NO cambiar estado aquí - esperar a respuesta del servidor y welcome burst
-
-	# Enviar solicitud de selección de servidor
-	_proto_client.send_server_selection(server_id, account_id, default_language)
-
-
-func get_servers_json() -> String:
-	var servers_array: Array = []
-	for server in available_servers:
-		servers_array.append(
-			{
-				"id": server.id,
-				"name": server.name,
-				"population": server.population,
-				"is_full": server.is_full,
-			}
-		)
-	return JSON.stringify({ "servers": servers_array })
-
-
-# ============================================================
-# SELECCIÓN DE PERSONAJE
-# ============================================================
-func select_character(character: CharacterData) -> void:
-	if character == null:
-		return
-
-	print("[GameManager] Personaje seleccionado: %s (ID: %d)" % [character.name, character.id])
-	selected_character = character
-
-	character_selected.emit(character.id, character.name)
-	change_state(GameState.IN_GAME)
-
-
-func select_character_from_id(char_id: int, char_name: String) -> void:
-	"""
-	Selecciona un personaje usando solo ID y nombre (desde UI).
-	Usado cuando la UI emite character_selected con estos parámetros.
-	"""
-	if char_id <= 0:
-		printerr("[GameManager] ID de personaje inválido: %d" % char_id)
-		return
-
-	print("[GameManager] Personaje seleccionado desde UI: %s (ID: %d)" % [char_name, char_id])
-
-	# Crear CharacterData básico
-	var char_data := CharacterData.new()
-	char_data.id = char_id
-	char_data.name = char_name
-	selected_character = char_data
-
-	# Enviar kvw (selección de personaje) al servidor
-	if _game_client != null and _game_client.is_tcp_connected():
-		print("[GameManager] Enviando kvw para personaje ID: %d" % char_id)
-		_game_client.send_character_selection(char_id)
-	else:
-		printerr("[GameManager] GameClient no conectado, no se puede enviar kvw")
-
-
-# ============================================================
-# LIMPIEZA
-# ============================================================
-func cleanup() -> void:
-	if _proto_client != null:
-		_proto_client.disconnect_from_server()
-	if _game_client != null:
-		_game_client.disconnect_tcp()
-	account_id = 0
-	selected_character = null
-	available_servers = []
-	_characters_list.clear()
-	_in_welcome_burst = false
-	_welcome_burst_started = false
-
-
-func parse_character_from_json(json_str: String) -> CharacterData:
-	if json_str == "" or json_str == null:
-		return null
-
-	var json := JSON.new()
-	var parse_result := json.parse(json_str)
-	if parse_result != Error.OK:
-		printerr("[GameManager] Error parseando personaje: %d" % parse_result)
-		return null
-
-	return CharacterData.from_json(json.get_data() as Dictionary)
-
-
-func _on_auth_response_received(
-	success: bool,
-	account_id_param: int,
-	servers_array: Array,
-	error: String,
-) -> void:
-	var acct_id: int = account_id_param
-
-	if success:
-		account_id = acct_id
-		available_servers = []
-
-		# Parsear servidores - servers_array is already an Array of server objects
-		for server_dict in servers_array:
-			var server: ServerInfo = ServerInfo.from_json(server_dict)
-			available_servers.append(server)
-
-		print(
-			"[GameManager] Auth exitoso. AccountId: %d, servidores: %d"
-			% [account_id, available_servers.size()]
-		)
-		auth_completed.emit(account_id, JSON.stringify(servers_array))
-
-		# Seleccionar primer servidor disponible
-		if available_servers.size() > 0:
-			select_server(available_servers[0].id)
-	else:
-		printerr("[GameManager] Auth fallido: %s" % error)
-		change_state(GameState.ERROR)
-
-
-func _on_server_selection_response_received(
-	success: bool,
-	ticket: String,
-	host: String,
-	ports: Array,
-	error: String,
-) -> void:
-	if success:
-		print("[GameManager] Servidor seleccionado: %s:%s" % [host, ports])
-
-		# Conectar al GameClient para el welcome burst
-		if _game_client != null:
-			_game_client.connect_to_game(host, int(ports[0]))
-
-			# Esperar a que esté conectado (polling explícito para evitar race conditions)
-			var wait_time: float = 0.0
-			var max_wait: float = 5.0
-			while not _game_client.is_tcp_connected() and wait_time < max_wait:
-				await get_tree().process_frame
-				wait_time += 0.016 # Aproximadamente 60 FPS
-
-			if not _game_client.is_tcp_connected():
-				printerr("[GameManager] Timeout esperando TCP connection")
-				error_received.emit("TCP_ERROR", "Timeout conectando TCP")
-				return
-
-			# Procesar frames extra para asegurar que el buffer está limpio
-			await get_tree().process_frame
-			await get_tree().process_frame
-
-			# Enviar ticket (kqz)
-			print("[GameManager] Enviando ticket (kqz) al servidor")
-			_game_client.send_ticket(ticket, default_language)
-	else:
-		printerr("[GameManager] Error selección servidor: %s" % error)
-		error_received.emit("SERVER_SELECT_ERROR", error)
-		change_state(GameState.ERROR)
-
-
-func _on_game_client_connected() -> void:
-	print("[GameManager] TCP conectado para welcome burst")
-	# Activar modo welcome burst para procesar kqp×3 + kvi + jtg
-	_in_welcome_burst = true
-	_characters_list = [] # Resetear lista por si acaso
-	print("[GameManager] Modo welcome burst activado")
-
-
-func _on_game_client_disconnected() -> void:
-	print("[GameManager] TCP desconectado")
-	_in_welcome_burst = false
-
-
-func _on_game_client_error(message: String) -> void:
-	printerr("[GameManager] Error TCP: %s" % message)
-	error_received.emit("TCP_ERROR", message)
-
-
-func _on_game_client_message_received(
-	opcode: String,
-	payload: PackedByteArray,
-	request_id: int,
-) -> void:
-	print("[GameManager] Mensaje TCP recibido: %s" % opcode)
-
-	if _in_welcome_burst:
-		match opcode:
-			"kqp":
-				# First kqp signals start of welcome burst (server sends kqp×3)
-				if not _welcome_burst_started:
-					_welcome_burst_started = true
-					print("[GameManager] Primer kqp recibido - bienvenida al servidor")
-				# Subsequent kqp are just markers (no-op)
-				pass
-			"kvi":
-				print("[GameManager] kvi recibido - parseando lista de personajes")
-				_handle_kvi_characters(payload)
-			"jtg":
-				# End of welcome burst - burst is complete
-				print(
-					"[GameManager] jtg recibido - burst completado (%d personajes)"
-					% _characters_list.size()
-				)
-				_in_welcome_burst = false
-				_welcome_burst_started = false
-				characters_received.emit(_characters_list)
-				change_state(GameState.CHARACTER_SELECT)
-			_:
-				pass # Otros mensajes durante el burst
-	else:
-		# Ya estamos en el juego - manejar respuesta de selección de personaje
-		match opcode:
-			"kva":
-				# Respuesta del servidor con identidad del personaje seleccionado
-				_handle_kva_response(payload)
-			"hpd":
-				# Personaje cargado, empezar partida
-				print("[GameManager] hpd recibido - personaje cargado")
-				change_state(GameState.IN_GAME)
-			_:
-				pass
-
-
-func _handle_kvi_characters(payload: PackedByteArray) -> void:
-	# Parsear payload de kvi usando decodificador protobuf
-	# El payload es una secuencia de caracteres en formato protobuf, no JSON
-	_characters_list = Proto.decode_kvi(payload)
-
-	if _characters_list.size() > 0:
-		print("[GameManager] kvi: recibidos %d personajes" % _characters_list.size())
-	else:
-		print("[GameManager] kvi: lista vacía de personajes")
-
-
-func _handle_kva_response(payload: PackedByteArray) -> void:
-	"""
-	Manages the kva (character selection response) opcode.
-	Formato: f1 (varint) = character_id
-	
-	Server sends kva after receiving kvw, confirming the character selection.
-	This triggers the next step in the connection flow.
-	"""
-	print("[GameManager] kva recibido - respuesta de selección de personaje")
-
-	# Parsear el payload para obtener el character_id
-	var fields: Array = Proto.parse(payload)
-	var char_id_field: Dictionary = Proto.first(fields, 1) as Dictionary
-
-	if char_id_field != null and char_id_field.has("v"):
-		var character_id: int = int(char_id_field["v"])
-		print("[GameManager] Personaje confirmado con ID: %d" % character_id)
-		_server_selection_received = true
-		# Emitir señal o continuar con el flujo según sea necesario
-	else:
-		printerr("[GameManager] kva malformado - no se pudo obtener character_id")
-		error_received.emit("PROTOCOL_ERROR", "kva malformado")
-
-
-func _on_connection_state_changed(connected: bool) -> void:
-	# No cambiar estado si estamos en medio de un proceso de login
-	if not connected and _current_state != GameState.PLAYER_LOGIN:
-		change_state(GameState.LAUNCHER)
-
-
-func _on_error_received(error: String, details: String) -> void:
-	printerr("[GameManager] Error: %s - %s" % [error, details])
-	error_received.emit(error, details)
-	if error != "AUTH_ERROR":
-		change_state(GameState.ERROR)
+	# Initialize with default CharacterData
+	current_character = CharacterData.new()
+
+# Initialize player state for a new session
+func initialize_player() -> void:
+	player_stats = {}
+	player_jobs = []
+	player_spells = []
+	player_inventory = { "kamas": 0, "items": [], "found": false }
+	spell_bar = { "bar_type": 0, "shortcuts": [], "found": false }
+	current_character = CharacterData.new()
+	is_character_loaded = false
+
+# Handle kvw (character info) message - should be called from WorldEntry
+func handle_kvw(payload: PackedByteArray) -> void:
+	# kvw is handled elsewhere for character metadata
+	pass
+
+# Handle kva (character alive) message - should be called from WorldEntry
+func handle_kva(payload: PackedByteArray) -> void:
+	# kva is handled elsewhere for character alive status
+	pass
+
+# Handle kub (player stats) - Block 1
+func _handle_kub(payload: PackedByteArray) -> void:
+	# Handle kub (player stats).
+	# kub format: f2 { f1 { f1: characteristic_id, f4/f5/f2: value }, f7: experience, f8: next_level, f9: alignment, f10: kamas }
+	var data = WorldProto.decode_kub(payload)
+	if data.found:
+		print("[GameManager] kub - stats recibidos para personaje")
+		player_stats = data.stats
+		current_character.experience = data.experience
+		current_character.next_level_experience = data.next_level
+		current_character.kamas = data.kamas
+		current_character.alignment = data.alignment
+		
+		# Print stat details
+		for stat_id in player_stats:
+			var stat = player_stats[stat_id]
+			if stat is Dictionary:
+				print("[GameManager]   Estadistica ID %d: base=%d, scroll=%d, equipment=%d" 
+					% [stat_id, stat.get("base", 0), stat.get("scroll", 0), stat.get("equipment", 0)])
+		
+		# Update character's total stats
+		_update_character_stats()
+
+# Handle irq (jobs/professions) - Block 1
+func _handle_irq(payload: PackedByteArray) -> void:
+	# Handle irq (player jobs).
+	# irq format: f1 (repeated) { f1: profession, f2: next_level, f3: level, f4: floor, f5: total }
+	var data = WorldProto.decode_irq(payload)
+	if data.found:
+		print("[GameManager] irq - %d profesiones recibidas" % data.jobs.size())
+		player_jobs = data.jobs
+		
+		for job in data.jobs:
+			print("[GameManager]   Profesion ID %d: nivel %d (next: %d)" 
+				% [job.profession, job.level, job.next_level])
+
+# Handle hms (spell list) - Block 1
+func _handle_hms(payload: PackedByteArray) -> void:
+	# Handle hms (spell list).
+	# hms format: f1 (repeated) { f1: grade, f3: spell_id, f4: origin }, f2: 1 at end
+	var data = WorldProto.decode_hms(payload)
+	if data.found:
+		print("[GameManager] hms - %d hechizos aprendidos" % data.spells.size())
+		player_spells = data.spells
+		
+		for spell in data.spells:
+			print("[GameManager]   Hechizo ID %d: grado %d, origen %d" 
+				% [spell.spell_id, spell.grade, spell.origin])
+
+# Handle ivx (inventory) - Block 1
+func _handle_ivx(payload: PackedByteArray) -> void:
+	# Handle ivx (inventory).
+	# ivx format: f1: kamas, f3 (repeated) { f1: slot, f5 { f1: template, effects }, f3: count, f4: uid }
+	var data = WorldProto.decode_ivx(payload)
+	if data.found or data.kamas > 0:
+		print("[GameManager] ivx - inventario recibido")
+		player_inventory = data
+		print("[GameManager]   Kamas: %d" % data.kamas)
+		print("[GameManager]   Items: %d" % data.items.size())
+		
+		for item in data.items:
+			print("[GameManager]      Item slot %d: template=%d, count=%d, uid=%d" 
+				% [item.slot, item.template, item.count, item.uid])
+
+# Handle itg (shortcut bar) - Block 1
+func _handle_itg(payload: PackedByteArray) -> void:
+	# Handle itg (shortcut bar).
+	# itg format: f1 (repeated) { f2: slot, f6 { f2: spell_id } } for spells, f9: items; f2: bar_type (1=spell, 0=item)
+	var data = WorldProto.decode_itg(payload)
+	if data.found:
+		print("[GameManager] itg - barra de atajos recibida")
+		spell_bar = data
+		
+		if data.bar_type == 1:
+			print("[GameManager]   Tipo: Spell Bar (%d atajos)" % data.shortcuts.size())
+		else:
+			print("[GameManager]   Tipo: Item Bar (%d atajos)" % data.shortcuts.size())
+		
+		for shortcut in data.shortcuts:
+			if shortcut.is_item:
+				print("[GameManager]     Slot %d: Item template %d" 
+					% [shortcut.slot, shortcut.item_template])
+			else:
+				print("[GameManager]     Slot %d: Spell ID %d" 
+					% [shortcut.slot, shortcut.spell_id])
+
+# Update character stats from player_stats dictionary
+func _update_character_stats() -> void:
+	current_character.stats = player_stats
+
+# Get character display name
+func get_character_name() -> String:
+	return current_character.character_name if current_character else ""
+
+# Check if character is fully loaded
+func is_character_ready() -> bool:
+	return is_character_loaded
+
+# Mark character as loaded after Block 1
+func mark_character_loaded() -> void:
+	is_character_loaded = true
+
+# Get summary of player state for debugging
+func get_player_summary() -> Dictionary:
+	return {
+		"name": get_character_name(),
+		"level": current_character.level if current_character else 1,
+		"kamas": current_character.kamas if current_character else 0,
+		"stats_count": player_stats.size(),
+		"jobs_count": player_jobs.size(),
+		"spells_count": player_spells.size(),
+		"items_count": player_inventory.items.size() if player_inventory else 0,
+		"shortcuts_count": spell_bar.shortcuts.size() if spell_bar else 0
+	}

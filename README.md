@@ -1,9 +1,9 @@
 # DreamFus Client
 
-> **Cliente alternativo de Dofus con cliente Godot 4.8 (GDScript puro)**
+> **Cliente alternativo de Dofus con backend Tauri, frontend Vite y cliente Godot 4.8**
 >
 > **Proyecto:** https://github.com/Pevalcar/dreamfus-client.git
-> **Ruta local:** `C:\Users\pevalcar\Proyectos\jondo-servidor\DofusClient`
+> **Ruta local:** `C:\Users\pevalcar\Proyectos\DofusClient`
 
 > **Golden Rule:** DreamFus Client is a fan-made project that reimplements Dofus mechanics, visuals, animations, and interfaces from scratch using freely usable assets and temporary placeholders.
 
@@ -23,70 +23,19 @@ Create an alternative client that:
 
 ---
 
-## 📋 Architecture
-
-### Current Structure (Godot 4.8 - GDScript only)
-
-```
-DofusClient/
-├── godot-client/              # Main Godot 4.8 project (GDScript)
-│   ├── project.godot          # Godot project file
-│   ├── scenes/                # Scene files
-│   │   ├── Main.tscn          # Entry point
-│   │   ├── Launcher.tscn      # Login screen
-│   │   ├── CharacterSelect.tscn  # Character selection
-│   │   └── Game.tscn          # In-game scene
-│   ├── src/                   # Scripts
-│   │   ├── A2D/               # Avatar rendering (A2D.Z parser)
-│   │   ├── Core/              # Game logic
-│   │   ├── Network/           # WebSocket & TCP protocol
-│   │   ├── Data/              # Data models
-│   │   └── UI/                # User interface
-│   └── docs/                  # Client-specific docs
-│
-├── src/                       # Legacy Rust/Tauri reference (kept for documentation)
-│   ├── lib.rs                 # Library exports (REFERENCE)
-│   └── a2d/
-│       └── mod.rs             # A2D parser (Rust reference)
-│
-├── docs/                      # Architecture documentation
-│   ├── DEFLATE_SOLUTION.md  # Deflate handling in Godot
-│   └── A2D_FLOW.md            # A2D parsing documentation
-│
-└── .gitignore                 # Exclusion rules
-```
-
-**⚠️ Note:** The Rust/Tauri backend (`src/lib.rs`, `src-tauri/`) is kept as **reference documentation only** and is not used by the active Godot client.
-
----
-
-## 📁 Project Structure
+## 📋 Implementation Roadmap
 
 | Phase | Objective | Status |
 |-------|-----------|--------|
 | **Phase 1** | Foundation & Build Setup | ✅ Complete |
-| **Phase 2** | Protocol Implementation (WebSocket Auth + TCP Bridge) | ✅ Complete |
-| **Phase 3** | UI Integration | ✅ Complete |
+| **Phase 2** | Protocol Implementation (WebSocket Auth + TCP Bridge) | 🚧 In Progress |
+| **Phase 3** | UI Integration | 🚧 In Progress |
 
 **See detailed roadmap:** `docs/IMPLEMENTATION-ROADMAP.md`
 
 ---
 
-## 🚀 Current Status - Godot Client (GDScript)
-
-### ✅ Complete Components
-
-| Component | File | Status |
-|-----------|------|--------|
-| WebSocket Client | `src/Network/SimpleProtocolClient.gd` | ✅ Complete |
-| TCP Game Client | `src/Network/GameClient.gd` | ✅ Complete |
-| Protobuf Utilities | `src/Network/Proto.gd` | ✅ Complete |
-| Game Manager | `src/Core/GameManager.gd` | ✅ Complete |
-| Character Select UI | `src/UI/CharacterSelectUI.gd` | ✅ Complete |
-| A2D Parser | `src/A2D/A2DParser.gd` | ✅ Basic (WebP extraction) |
-| Byte Utilities | `src/A2D/Bytes.gd` | ✅ Complete |
-
-### 📁 Project Structure
+## 📁 Project Structure
 
 ```
 DofusClient/
@@ -281,46 +230,30 @@ Server ID: 290 (DreamFus)
 
 ## 💻 Development
 
-### Godot MCP Toolkit (Recommended)
-
-For enhanced code navigation and analysis, install the Godot MCP Toolkit:
+### Install Dependencies
 
 ```bash
-# Install via npm (global)
-npm install -g @npgamedev/godot-mcp-server@1.1.2
-
-# Or use via npx (local to project)
-npx @npgamedev/godot-mcp-server@1.1.2
+cd frontend
+npm install
 ```
 
-**Features provided by MCP:**
-- Symbol search and navigation
-- Code tracing and relationships
-- Architecture queries
-- Coverage verification
-
-### Run Godot
+### Development
 
 ```bash
-# Open project in Godot 4.8
-"C:\Users\<tu-usuario>\Godot\Godot.exe" --path godot-client
+# Frontend
+cd frontend && npm run dev
 
-# Run in headless mode (for CI/testing)
-"C:\Users\<tu-usuario>\Godot\Godot.exe" --headless --path godot-client --quit
+# Build
+cd frontend && npm run build
+
+# Tauri (Rust backend)
+cd .. && cargo build
 ```
 
-### Development Workflow
+### Run Tests
 
 ```bash
-# 1. Open Godot project
-godot --path godot-client
-
-# 2. Configure Godot MCP (see CONTRIBUTING.md for details)
-
-# 3. Test changes in Godot editor
-
-# 4. Run headless verification
-"C:\Users\<tu-usuario>\Godot\Godot.exe" --headless --path godot-client --quit
+cargo test
 ```
 
 ---
@@ -329,15 +262,10 @@ godot --path godot-client
 
 1. Fork the repository
 2. Create a feature branch
-3. Install Godot MCP Toolkit: `npm install -g @npgamedev/godot-mcp-server@1.1.2`
-4. Open project in Godot 4.8
-5. Follow `docs/CONTRIBUTING.md`
-6. Submit a pull request
+3. Follow `docs/CONTRIBUTING.md`
+4. Submit a pull request
 
-**For Godot development:**
-- Use GDScript only (no C#/Tauri/TypeScript)
-- Reference Rust code in `src/a2d/mod.rs` for A2D parsing
-- See `godot-client/README.md` for client-specific docs
+**Note:** This project is fan-made. No game assets are redistributed. Use placeholders or extract assets locally for development only.
 
 ---
 

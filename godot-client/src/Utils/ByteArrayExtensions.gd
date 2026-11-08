@@ -1,42 +1,50 @@
-## ByteArrayExtensions.gd
-## Helper functions para manejar PackedByteArray en Godot 4.8
-## donde el método slice() ha sido removido
-
-extends RefCounted
+# ByteArrayExtensions.gd - Extensions for PackedByteArray
 class_name ByteArrayExtensions
+extends RefCounted
 
-## Helper para extraer subByteArray en Godot 4.8
-## En Godot 4.8, PackedByteArray.slice() y .sub() han sido removidos
-## Este método proporciona un reemplazo eficiente
-static func byte_subarray(data: PackedByteArray, start: int, length: int) -> PackedByteArray:
-	if start < 0 or length < 0 or start + length > data.size():
+# Extract a byte subarray from a PackedByteArray
+static func byte_subarray(ba: PackedByteArray, start: int, length: int) -> PackedByteArray:
+	if ba == null or start < 0 or length <= 0:
 		return PackedByteArray()
-	
 	var result = PackedByteArray()
-	result.resize(length)
-	for i in range(length):
-		result[i] = data[start + i]
+	var end = min(start + length, ba.size())
+	for i in range(start, end):
+		result.append(ba[i])
 	return result
 
-## Helper para extraer subByteArray hasta el final
-static func byte_subarray_from(data: PackedByteArray, start: int) -> PackedByteArray:
-	if start < 0 or start >= data.size():
-		return PackedByteArray()
-	return byte_subarray(data, start, data.size() - start)
+# Read a 32-bit unsigned integer in little-endian format
+static func read_u32_le(ba: PackedByteArray, offset: int) -> int:
+	if ba == null or offset + 4 > ba.size():
+		return 0
+	return ba[offset] | (ba[offset + 1] << 8) | (ba[offset + 2] << 16) | (ba[offset + 3] << 24)
 
-## Helper para convertir subByteArray a string ASCII
-## En Godot 4.8, get_string_from_ascii(offset, length) no existe
-static func bytes_to_string_ascii(data: PackedByteArray, start: int, length: int) -> String:
-	var bytes = byte_subarray(data, start, length)
-	var result = ""
-	for i in range(bytes.size()):
-		result += char(bytes[i])
+# Read a 64-bit unsigned integer in little-endian format
+static func read_u64_le(ba: PackedByteArray, offset: int) -> int:
+	if ba == null or offset + 8 > ba.size():
+		return 0
+	return ba[offset] | (ba[offset + 1] << 8) | (ba[offset + 2] << 16) | (ba[offset + 3] << 24) |
+		(ba[offset + 4] << 32) | (ba[offset + 5] << 40) | (ba[offset + 6] << 48) | (ba[offset + 7] << 56)
+
+# Pad array to specific size with trailing zeros
+static func pad_array(ba: PackedByteArray, size: int) -> PackedByteArray:
+	if ba.size() >= size:
+		return ba.duplicate()
+	var result = ba.duplicate()
+	while result.size() < size:
+		result.append(0)
 	return result
 
-## Helper para extraer un string de 4 bytes (mágicas/códigos)
-static func peek_string_4(data: PackedByteArray, offset: int) -> String:
-	var bytes = byte_subarray(data, offset, 4)
-	var result = ""
-	for i in range(4):
-		result += char(bytes[i])
-	return result
+# Check if byte array starts with specific prefix
+static func starts_with(ba: PackedByteArray, prefix: PackedByteArray) -> bool:
+	if ba == null or prefix == null or ba.size() < prefix.size():
+		return false
+	for i in range(prefix.size()):
+		if ba[i] != prefix[i]:
+			return false
+	return true
+
+# Convert byte array to hex string
+static func to_hex(ba: PackedByteArray) -> String:
+	if ba == null:
+		return ""
+	return ba.hexify()

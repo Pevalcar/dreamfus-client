@@ -1,23 +1,26 @@
-[gd_scene format=3]
+[gd_version]
 
-[ext_resource type="Script" uid="uid://cgawipk74odq0" path="res://src/Core/Main.gd" id="1"]
-[ext_resource type="Script" uid="uid://6b3dhfsi0fqt" path="res://src/Core/GameManager.gd" id="2"]
-[ext_resource type="Script" uid="uid://dfartqae55ov6" path="res://src/Network/SimpleProtocolClient.gd" id="3"]
+major=4
+minor=8
+patch=0
 
-[node name="Main" type="Node"]
-script = ExtResource("1")
+[doc]
 
-[node name="GameManager" type="Node" parent="."]
-script = ExtResource("2")
+name="Main Scene"
+script=res://src/Core/GameClient.gd
 
-[node name="WebSocketClient" type="Node" parent="."]
-script = ExtResource("3")
+[node]
 
-[node name="LauncherContainer" type="CanvasLayer" parent="."]
-layer = 1
+name="Main"
+type="Node"
+parent=""
 
-[node name="CharacterSelectContainer" type="CanvasLayer" parent="."]
-layer = 2
+[children]
 
-[node name="GameContainer" type="CanvasLayer" parent="."]
-layer = 3
+[node input_map]
+
+name=""
+
+[destroy]
+
+name=""

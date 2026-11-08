@@ -1,44 +1,56 @@
-# Assets grandes de Alea (NO se distribuyen) - placeholders temporales
-assets/
-!assets/.gitkeep
-dreamfus.runtime.json
+# Godot Engine
+/.import/
+*.import
+*.uid
+*.import.toml
+.godot/
+.import/
 
-# Dependencias de Node.js
-node_modules/
-*.vite/
+# Godot mono cache
+.mono/
+*.mono
 
-# Build
-dist/
-out/
-artifacts/
-*.log
+# Mono
+*.csproj
+*.unity
+*.sln
 
-# Temporales
-*.tmp
-*.temp
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # IDE
-.vscode/
 .idea/
-*.code-workspace
+*.swp
+*.swo
+*~
+.vscode/
 
-# Godot MCP Toolkit addon (toolkit runtime code, not versioned individually)
-godot-client/addons/
+# Node modules (for any frontend parts)
+node_modules/
 
-# NPM
-package-lock.json
-
-# Rust/Build artifacts
+# Tauri/Rust
+dist/
 target/
-Cargo.lock
+.godot/
 
-# Temp/Generated
-.agents/
-gen/
-skills-lock.json
-src-tauri/
-test/
-tests/
-verify_protocol.ps1
+# Other
+godot-mcp-toolkit/
+
+# Secrets / API keys (don't commit these)
+*.secret
+*.key
+
+# Large asset files (if any)
+# You may want to add specific patterns for game assets
+# *.png
+# *.jpg
+# *.ogg
+
+# Logs
+*.log

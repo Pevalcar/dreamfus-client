@@ -9,7 +9,8 @@
 				"@npgamedev/godot-mcp-server@1.1.2"
 			],
 			"env": {
-				"GODOT_MCP_CONFIG_VERSION": "1"
+				"GODOT_MCP_CONFIG_VERSION": "1",
+				"npm_config_prefer_offline": "true"
 			}
 		}
 	}
