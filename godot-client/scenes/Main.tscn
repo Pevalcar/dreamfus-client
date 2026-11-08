@@ -1,15 +1,17 @@
 [gd_scene format=3 uid="uid://bvdo5mtrpsfnx"]
 
-[ext_resource type="Script" uid="uid://n15aj1pm2mo9" path="res://src/Core/GameManager.gd" id="1"]
+[ext_resource type="Script" uid="uid://6b3dhfsi0fqt" path="res://src/Core/GameManager.gd" id="1"]
+[ext_resource type="Script" uid="uid://dfartqae55ov6" path="res://src/Network/SimpleProtocolClient.gd" id="2"]
+[ext_resource type="Script" uid="uid://cgawipk74odq0" path="res://src/Core/Main.gd" id="3"]
 
 [node name="Main" type="Node" unique_id=1069323417]
-
-[children]
+script = ExtResource("3")
 
 [node name="GameManager" type="Node" parent="." unique_id=336634351]
 script = ExtResource("1")
 
-[node name="GameClient" type="Node" parent="." unique_id=336634352]
+[node name="WebSocketClient" type="Node" parent="." unique_id=336634353]
+script = ExtResource("2")
 
 [node name="LauncherContainer" type="CanvasLayer" parent="." unique_id=1069323418]
 layer = 1
@@ -19,3 +21,5 @@ layer = 2
 
 [node name="GameContainer" type="CanvasLayer" parent="." unique_id=1069323420]
 layer = 3
+
+[connections]
