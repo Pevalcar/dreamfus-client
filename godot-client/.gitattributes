@@ -1,2 +1,17 @@
-# Normalize EOL for all files that Git considers text files.
-* text=auto eol=lf
+# Godot engine import files - treat as binary
+*.import binary merge=binary
+*.import.lock binary merge=binary
+
+# Godot scene and resource files
+*.tscn text
+*.scn text
+*.tres text
+*.res text
+
+# Godot script files
+*.gd text eol=lf
+*.gdc text eol=lf
+*.godot text eol=lf
+
+# Godot project file
+project.godot text eol=lf

@@ -4,18 +4,13 @@
 *.godot/
 *.import/
 
-# Generated files
+# Godot import files (generated)
 *.import
 *.godot
 *.uid
-export_presets.cfg
-.editor/
-.editor-4/
-.godot/
-
-# Backup files
-*.backup
 *.import.toml
+.godot/
+.import/
 
 # Mono
 *.csproj
