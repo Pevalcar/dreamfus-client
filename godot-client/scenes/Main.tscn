@@ -1,26 +1,21 @@
-[gd_version]
+[gd_scene format=3 uid="uid://d6a8a7j3cwn6fx"]
 
-major=4
-minor=8
-patch=0
+[ext_resource type="Script" uid="uid://n15aj1pm2mo9" path="res://src/Core/GameManager.gd" id="1"]
 
-[doc]
-
-name="Main Scene"
-script=res://src/Core/GameClient.gd
-
-[node]
-
-name="Main"
-type="Node"
-parent=""
+[node name="Main" type="Node" unique_id=1069323417]
 
 [children]
 
-[node input_map]
+[node name="GameManager" type="Node" parent="." unique_id=336634351]
+script = ExtResource("1")
 
-name=""
+[node name="GameClient" type="Node" parent="." unique_id=336634352]
 
-[destroy]
+[node name="LauncherContainer" type="CanvasLayer" parent="." unique_id=1069323418]
+layer = 1
 
-name=""
+[node name="CharacterSelectContainer" type="CanvasLayer" parent="." unique_id=1069323419]
+layer = 2
+
+[node name="GameContainer" type="CanvasLayer" parent="." unique_id=1069323420]
+layer = 3
