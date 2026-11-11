@@ -74,7 +74,7 @@ func show_character(data) -> void:
 	var char_stats: Array = []
 
 	if data is CharacterData:
-		char_id = data.id
+		char_id = data.get_id() if data.has_method("get_id") else data.character_id
 		char_name = data.name
 		char_level = data.level
 		char_breed = data.breed
@@ -227,12 +227,16 @@ func _get_breed_emblem(breed: int) -> Texture2D:
 func _on_select_pressed() -> void:
 	"""Confirmar selección y enviar al servidor."""
 	if _character_data != null:
-		confirmed.emit(_character_data.id, _character_data.name)
+		var char_id = _character_data.get("id", 0)
+		var char_name = _character_data.get("name", "")
+		confirmed.emit(char_id, char_name)
 	hide_panel()
 
 
 func _on_delete_pressed() -> void:
 	"""Solicitar eliminación del personaje."""
 	if _character_data != null:
-		delete_requested.emit(_character_data.id, _character_data.name)
+		var char_id = _character_data.get("id", 0)
+		var char_name = _character_data.get("name", "")
+		delete_requested.emit(char_id, char_name)
 	hide_panel()

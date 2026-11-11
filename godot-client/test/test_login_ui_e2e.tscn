@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bloginuie2e1"]
+
+[ext_resource type="Script" path="res://test/test_login_ui_e2e.gd" id="1_login"]
+
+[node name="LoginUIE2E" type="Node"]
+script = ExtResource("1_login")

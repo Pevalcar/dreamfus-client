@@ -4,6 +4,8 @@
 ##
 ## The kvw message must have the format: { f1: character_id } where f1 is a varint.
 ## The bug was: client sent { f1: { f1: id } } (nested message) instead of flat varint.
+##
+## Updated for Godot 4.8 beta2 compatibility - uses full preload paths without class_name reliance.
 
 extends SceneTree
 

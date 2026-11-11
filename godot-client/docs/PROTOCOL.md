@@ -199,7 +199,7 @@ El cliente envía el ticket para autenticarse con el servidor de juego:
 
 **Estructura protobuf:**
 ```
-f2 { Any {
+f1 { Any {
   f1: "type.ankama.com/kqz"
   f2: { f2: ticket, f3: language }
 }
@@ -208,6 +208,14 @@ f2 { Any {
 **Implementación en Godot:**
 - Usa `GameClient.send_ticket(ticket, language)`
 - Lenguaje opcional (por defecto "es")
+
+**Sobre el campo raíz:** el servidor no depende de que sea `f1` o `f2`. Tanto su
+enrutado (`payloadStr.Contains("type.ankama.com/kqz")`) como `ConnectionProtocol.ReadPayload`
+**buscan el marcador `type.ankama.com/` en los bytes crudos**, así que el número del campo
+raíz da igual. Los pushes del servidor, en cambio, van **doble anidados**:
+`f1 { f1 { f1: type_url, f2: payload } }` (`ConnectionProtocol.Push`). Por eso
+`Proto.decode()` localiza el `type_url` escaneando el frame en vez de recorrer campos; no
+lo cambies a un recorrido por número de campo.
 
 ### Formato de Mensaje kvi (Character List)
 
@@ -254,6 +262,27 @@ kvw {
 GameClient.send_character_selection(character_id)
 ```
 
+### Entrada al mundo: `kvw` → `lqc` → `jru`
+
+Elegir personaje no devuelve un solo bloque. El servidor contesta en tres tandas y
+espera una confirmación entre ellas (`WorldEntry.cs`):
+
+```
+cliente kvw  ->  bloque 1: personaje, stats, quests, almanaque  (~330 mensajes)
+cliente lqc  ->  bloque 2: los cuatro catálogos grandes
+cliente kqo  ->  bloque 3: el mapa, con el jru dentro
+```
+
+- El cliente **debe seguir leyendo** después de `jtg`. Antes se dejaba de llamar a
+  `get_data()` al terminar el burst de bienvenida, y con eso el bloque 1 no entraba nunca.
+- El cliente **sí envía `lqc`** (justo después del `kvw`): es lo que hace que el servidor
+  mande el mapa. Como el servidor manda el bloque 1 y el 2 antes de leer el siguiente
+  frame, el `lqc` se encola detrás y el orden en el cable es el correcto.
+- `jru` trae el mapa en **f2** (`WorldProto.decode_jru`). El bloque 3 incluye el jru y los
+  actores; el cliente solo necesita el id para pedir la geometría con `kkr`.
+- Un fallo de este flujo no rompe la conexión: se queda esperando en silencio. El
+  `GameManager` tiene un temporizador de 15 s que avisa con `MAP_TIMEOUT`.
+
 ### Señal characters_received
 
 La UI recibe la lista de personajes mediante una señal:
@@ -291,11 +320,19 @@ match opcode:
 
 ### Prefijo de longitud
 
-Todos los mensajes TCP usan un prefijo de 4 bytes big-endian indicando el tamaño del payload:
+Todos los mensajes TCP usan un prefijo **VarInt** con el tamaño del payload:
 
 ```
 [VarInt size][protobuf message]
 ```
+
+**Por qué VarInt y no uint32:** el servidor escribe el prefijo con
+`CodedOutputStream.WriteUInt32` (`NetworkMessage.WriteFrameAsync`), y en Google.Protobuf
+para C# ese método escribe un **varint**; el de 4 bytes little-endian es `WriteFixed32`.
+Leerlo como uint32 LE desalinea el flujo: el frame `kra` (25 bytes, bytes
+`19 0A 17 0A …`) se interpreta como `0x0A170A19` = 169282073 y la conexión muere con
+«Frame demasiado grande». Lo mismo aplica al envío: el servidor lee con `ReadFrameAsync`,
+que es varint.
 
 ### Helper methods en Proto.gd
 
@@ -325,9 +362,9 @@ El cliente TCP está implementado en `src/Network/GameClient.gd` con las siguien
 
 ### Límite de frames por frame
 
-Para evitar bucles infinitos, el `_drain_buffer()` limitea a 10 frames por llamada (línea 233-235):
+Para evitar bucles infinitos, el `_drain_buffer()` limita a 20 frames por llamada (el burst completo son 14):
 ```gdscript
-if frames_parsed > 10:
+if frames_parsed > 20:
     print("[GameClient] Demasiados frames, deteniendo para evitar bucle infinito")
     break
 ```

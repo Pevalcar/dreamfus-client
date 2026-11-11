@@ -1,20 +1,9 @@
 class_name LauncherUI
-# @class LauncherUI
-# Interfaz de inicio de sesión
+# LauncherUI.gd - Interfaz de inicio de sesión
 # Maneja la pantalla de bienvenido y autenticación
 extends Control
 
-# La señal cambió: ahora recibe usuario/contraseña, no token.
-# Token obtenido de /api/entrar, guardado como variable de instancias para pasarlo a la señal.
-var _auth_token: String = ""
-
-signal auth_requested(
-	token: String,
-	lang: String,
-	install_id: String,
-	host: String,
-	port: int,
-)
+signal auth_requested(token: String, lang: String, install_id: String, host: String, port: int)
 
 # Lista de idiomas disponibles para el OptionButton
 const LANGUAGES: Array = [
@@ -26,6 +15,15 @@ const LANGUAGES: Array = [
 
 # Idioma seleccionado por defecto (índice en LANGUAGES)
 const DEFAULT_LANG_INDEX: int = 0
+
+# Note: No class_name to avoid type resolution issues in Godot 4.8 beta2
+# La señal: ahora recibe usuario/contraseña a través de HTTPRequest
+# Token obtenido de /api/entrar, guardado como variable de instancias para pasarlo a la señal.
+var _auth_token: String = ""
+
+# Signal connection state tracking to prevent duplicates
+var _signals_connected: bool = false
+var _request_in_progress: bool = false
 
 @onready var title_label: Label = $VBoxContainer/TitleLabel
 @onready var version_label: Label = $VBoxContainer/VersionLabel
@@ -57,6 +55,16 @@ func _ready() -> void:
 	_connect_signals()
 
 
+# Control de estado visual durante solicitudes HTTP
+func _set_busy(busy: bool, status_message: String = "Conectando...") -> void:
+	connect_button.disabled = busy
+	if progress_bar != null:
+		progress_bar.visible = busy
+	if status_label != null:
+		status_label.text = status_message
+		print("[LauncherUI] Estado: %s" % status_message)
+
+
 ## Añade los idiomas al OptionButton ANTES de seleccionar.
 func _populate_languages() -> void:
 	if lang_option == null:
@@ -71,6 +79,7 @@ func _setup_defaults() -> void:
 	# Servidor por defecto
 	if server_host_entry != null:
 		server_host_entry.text = "127.0.0.1"
+	# Puerto 8888 para HTTP (login), 5557 para WebSocket
 	if server_port_spin != null:
 		server_port_spin.value = 5557
 
@@ -84,6 +93,11 @@ func _setup_defaults() -> void:
 
 
 func _connect_signals() -> void:
+	# Prevent duplicate signal connections
+	if _signals_connected:
+		print("[LauncherUI] Señales ya conectadas, saltando duplicados")
+		return
+
 	if connect_button != null:
 		connect_button.pressed.connect(_on_connect_pressed)
 	if get_node_or_null("HTTPRequest") != null:
@@ -91,58 +105,63 @@ func _connect_signals() -> void:
 		if http != null:
 			http.request_completed.connect(_on_http_request_completed)
 
-
-func _set_busy(busy: bool, status_message: String = "Conectando...") -> void:
-	connect_button.disabled = busy
-	if progress_bar != null:
-		progress_bar.visible = busy
-	if status_label != null:
-		status_label.text = status_message
-		print("[LauncherUI] Estado: %s" % status_message)
+	_signals_connected = true
 
 
 func _on_connect_pressed() -> void:
-	if username_entry == null or password_entry == null:
+	# Prevent duplicate requests while one is in progress
+	if _request_in_progress:
+		print("[LauncherUI] Ya hay una petición en progreso, ignorando")
 		return
+
+	# Buscar los nodos directamente en lugar de usar @onready variables
+	var username_node = get_node_or_null("VBoxContainer/UsernameEntry") as LineEdit
+	var password_node = get_node_or_null("VBoxContainer/PasswordEntry") as LineEdit
+	
+	if username_node == null or password_node == null:
+		print("[LauncherUI] ERROR: No se encontraron VBoxContainer/UsernameEntry o VBoxContainer/PasswordEntry")
+		_set_busy(false, "Error: No se encuentran los campos de usuario/contraseña")
+		return
+	
+	var username_entry = username_node
+	var password_entry = password_node
 
 	var user: String = username_entry.text.strip_edges()
 	var password: String = password_entry.text.strip_edges()
 	var host: String = server_host_entry.text.strip_edges()
-	var port: int = int(server_port_spin.value) if server_port_spin != null else 5557
-	var lang_code: String = "es"
-	if lang_option != null and lang_option.get_item_count() > 0:
-		lang_code = LANGUAGES[lang_option.selected][1]
+	print("[LauncherUI] user.text='%s' password.text='%s' host='%s'" % [user, password, host])
+	print("[LauncherUI] user.length=%d password.length=%d" % [user.length(), password.length()])
 
-	if user.is_empty() or password.is_empty():
+	# Workaround for Godot 4.8 beta2 bug where is_empty() may fail on non-empty strings
+	if user.length() == 0 or password.length() == 0:
 		_set_busy(false, "Usuario y contraseña requeridos")
 		return
 
 	_set_busy(true, "Autenticando...")
+	_request_in_progress = true
 
 	# Construir la URL del endpoint de login
 	var url := "http://%s:8888/api/entrar" % host
 	var body := JSON.stringify({ "usuario": user, "clave": password, "ip": "127.0.0.1" })
 
 	var http := get_node_or_null("HTTPRequest") as HTTPRequest
-	print("[LauncherUI] HTTPRequest encontrado: %s" % (http != null))
-	print("[LauncherUI] Hijos directos de Launcher:")
-	for child in get_children():
-		print("[LauncherUI]   - %s (%s)" % [child.name, child.get_class()])
 	if http == null:
 		_set_busy(false, "Error: HTTPRequest no encontrado en la escena")
+		_request_in_progress = false
 		return
+
+	print("[LauncherUI] Enviando petición HTTP a: %s" % url)
 
 	# request() usa METHOD_POST = 1
 	var err: Error = http.request(
 		url,
 		["Content-Type: application/json"],
-
 		HTTPClient.METHOD_POST,
-
 		body,
 	)
 	if err != OK:
 		_set_busy(false, "Error al iniciar petición: %d" % err)
+		_request_in_progress = false
 
 
 ## Se dispara cuando el servidor responde a /api/entrar.
@@ -171,7 +190,7 @@ func _on_http_request_completed(
 		status_label.text = "Respuesta inválida del servidor"
 		print("[LauncherUI] Estado: %s" % status_label.text)
 		return
-	
+
 	var resp: Dictionary = json.get_data() as Dictionary
 
 	if not (resp as Dictionary).get("bien", false):
@@ -189,6 +208,7 @@ func _on_http_request_completed(
 	if token.is_empty():
 		status_label.text = "El servidor no devolvió token"
 		print("[LauncherUI] Estado: %s" % status_label.text)
+		_request_in_progress = false
 		return
 
 	# Guardar token para pasarlo a la señal
@@ -206,9 +226,10 @@ func _on_http_request_completed(
 		_lang_code(),
 		install_id,
 		server_host_entry.text.strip_edges(),
-		int(server_port_spin.value) if server_port_spin != null else 5557,
+		int(server_port_spin.value) if server_port_spin != null else 5555,
 	)
 	print("[LauncherUI] auth_requested emitido")
+	# Nota: No restablecemos _request_in_progress aquí porque la UI va a cambiar de escena/estado.
 
 
 ## Devuelve el código de idioma seleccionado como String.

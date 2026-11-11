@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bkq0bursse2e"]
+
+[ext_resource type="Script" path="res://test/test_kqz_burst_e2e.gd" id="1_e2e"]
+
+[node name="KqzBurstE2E" type="Node"]
+script = ExtResource("1_e2e")

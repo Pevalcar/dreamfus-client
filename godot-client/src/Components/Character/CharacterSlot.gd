@@ -59,7 +59,7 @@ func set_character_data(data) -> void:
 	Acepta CharacterData, Dictionary o cualquier objeto con propiedades id, name, breed, level
 	"""
 	if data is CharacterData:
-		character_id = data.id
+		character_id = data.get_id() if data.has_method("get_id") else data.character_id
 		character_name = data.name
 		character_breed = data.breed
 		character_level = data.level
@@ -70,10 +70,10 @@ func set_character_data(data) -> void:
 		character_level = data.get("level", 1)
 	else:
 		# Intentar acceder como objeto (CharacterData o similar)
-		character_id = data.id if data.has_method("get") else data.id
-		character_name = data.name if data.has_method("get") else data.name
-		character_breed = data.breed if data.has_method("get") else data.breed
-		character_level = data.level if data.has_method("get") else data.level
+		character_id = data.get_id() if data.has_method("get_id") else (data.id if data.has_method("get") else 0)
+		character_name = data.name if data.has_method("get") else (data.name if data.has_method("get") else "")
+		character_breed = data.breed if data.has_method("get") else (data.breed if data.has_method("get") else 0)
+		character_level = data.level if data.has_method("get") else (data.level if data.has_method("get") else 1)
 
 	_update_ui()
 

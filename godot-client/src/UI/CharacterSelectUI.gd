@@ -68,11 +68,13 @@ func populate_characters(characters: Array) -> void:
 
 
 func _connect_signals() -> void:
-	# Escuchar auth completado para mostrar servidores
+	# Listen for auth completed to handle server list (if needed for manual selection)
+	# For now, server selection is handled automatically by Main.gd
+	
+	# Listen for error events
 	if GameManager.instance != null:
-		GameManager.instance.auth_completed.connect(_on_auth_completed)
-		GameManager.instance.characters_received.connect(_on_characters_received)
-		GameManager.instance.error_received.connect(_on_error_received)
+		if GameManager.instance.has_signal("error_received"):
+			GameManager.instance.error_received.connect(_on_error_received)
 
 	# Conectar botones
 	if back_button != null:
@@ -80,11 +82,14 @@ func _connect_signals() -> void:
 	if create_button != null:
 		create_button.pressed.connect(_on_create_pressed)
 
-	# Conectar señales del CharacterDetailPanel
-	if detail_panel != null:
-		detail_panel.confirmed.connect(_on_detail_confirmed)
-		detail_panel.cancelled.connect(_on_detail_cancelled)
-		detail_panel.delete_requested.connect(_on_detail_delete_requested)
+	# Conectar señales del CharacterDetailPanel (if exists in scene)
+	if detail_panel != null and detail_panel.has_method("connect"):
+		if detail_panel.has_signal("confirmed"):
+			detail_panel.confirmed.connect(_on_detail_confirmed)
+		if detail_panel.has_signal("cancelled"):
+			detail_panel.cancelled.connect(_on_detail_cancelled)
+		if detail_panel.has_signal("delete_requested"):
+			detail_panel.delete_requested.connect(_on_detail_delete_requested)
 
 
 func _on_auth_completed(account_id: int, servers_json: String) -> void:
@@ -94,10 +99,14 @@ func _on_auth_completed(account_id: int, servers_json: String) -> void:
 		server_label.text = "Cuenta: %d" % account_id
 
 
-func _on_characters_received(characters: Array) -> void:
+## Public method to receive characters from TCP connection
+func receive_characters(characters: Array) -> void:
 	print("[CharacterSelectUI] Recibidos %d personajes del servidor" % characters.size())
 	_characters = characters
 	_populate_character_list()
+
+func _on_characters_received(characters: Array) -> void:
+	receive_characters(characters)
 
 
 func _populate_character_list() -> void:
@@ -113,7 +122,9 @@ func _create_character_slots() -> void:
 	# Instanciar CharacterButton.tscn para cada personaje
 	for char_data in _characters:
 		var character_button: CharacterSlot = CHARACTER_BUTTON_SCENE.instantiate()
-		character_button.name = "CharacterSlot_%d" % char_data.id
+		# Use character_name as fallback if id field not available
+		var char_id = char_data.get("id", char_data.get("character_id", 0))
+		character_button.name = "CharacterSlot_%d" % char_id
 		
 		# Configurar datos del personaje
 		character_button.set_character_data(char_data)
@@ -255,7 +266,7 @@ func _on_detail_confirmed(character_id: int, character_name: String) -> void:
 		detail_panel.hide_panel()
 	
 	# Emitir señal para que Main la maneje
-	character_selected.emit(character_id, character_name)
+	character_detail_confirmed.emit(character_id, character_name)
 
 
 func _on_detail_cancelled() -> void:
