@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bworldentrye2e1"]
+
+[ext_resource type="Script" path="res://test/test_world_entry_e2e.gd" id="1_world"]
+
+[node name="WorldEntryE2E" type="Node"]
+script = ExtResource("1_world")

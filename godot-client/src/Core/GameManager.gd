@@ -249,12 +249,17 @@ func select_character_from_id(character_id: int, character_name: String) -> void
 	selected_character = current_character # Update selected_character alias
 	if game_client != null:
 		game_client.send_character_selection(character_id)
+		# lqc is the client saying it has digested block 1; the server answers with
+		# the map. It is sent here rather than on a later trigger because the
+		# emulator sends block 1 and 2 before it reads the next frame, so this
+		# queues behind them and the order on the wire is the real one.
+		game_client.send_push("lqc")
 
 	# Emit character selected signal
 	character_selected.emit(character_id, character_name)
 
-	# Start map block timeout timer
-	# Godot client does not send lqc, server delays map block 5s
+	# The map block arrives after the lqc that select_character_from_id sends;
+	# this timer is only the safety net if it never does.
 	start_map_block_timer()
 
 
@@ -342,17 +347,17 @@ func handle_server_selection_error(error: String) -> void:
 
 
 # ========== Map Block Timeout Handlers ==========
-## Manage timeout for map block (jru) reception
-## Godot client does not send lqc, so server delays map block by 5s
-## Client must implement 15s timeout to prevent UI freeze
+## Manage timeout for map block (jru) reception.
+## The map block follows the lqc sent after kvw; the timer only covers the case
+## where the server never answers, so the UI does not sit waiting forever.
 func create_map_block_timeout() -> void:
 	"""Create timer that will trigger if map block is not received."""
 	_map_block_timeout = Timer.new()
 	_map_block_timeout.wait_time = 15.0
 	_map_block_timeout.one_shot = true
-	_map_block_timeout.auto_start = true
 	_map_block_timeout.connect("timeout", _on_map_block_timeout)
 	add_child(_map_block_timeout)
+	_map_block_timeout.start()
 	print("[GameManager] Map block timeout timer created (15s)")
 
 
@@ -440,11 +445,6 @@ func _handle_kvi_messages(payload: PackedByteArray) -> void:
 # Handle jtg (end of burst) message
 func _handle_jtg_end_of_burst(payload: PackedByteArray) -> void:
 	print("[GameManager] jtg recibido — burst completo (%d personajes)" % characters.size())
-	# Mark that we've received the welcome burst
-	# This prevents reading more data until we send kvw
-	if game_client != null:
-		game_client._received_welcome_burst = true
-	
 	# Emit characters_received to UI after jtg signals burst completion
 	# Per protocol: jtg is the trigger that the character list is complete
 	characters_received.emit(characters)
@@ -564,8 +564,8 @@ func _update_character_stats() -> void:
 func _handle_jru_map_block(payload: PackedByteArray) -> void:
 	"""Handle map block message - the trigger for loading the world.
 	
-	⚠️  CRITICAL DIFFERENCE: Godot client does NOT send lqc.
-	Server should send jru after 5s timeout for Godot clients.
+	The server sends it after the lqc of the character selection; the jru carries
+	the map the character is standing on.
 	"""
 	if _map_block_timeout:
 		var map_data = WorldProto.decode_jru(payload)

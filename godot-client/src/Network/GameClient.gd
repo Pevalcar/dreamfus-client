@@ -49,8 +49,6 @@ var _bytes_received: int = 0 # Counter for debugging
 ## Current authentication stage for server selection flow
 var _current_auth_stage: String = "initial_auth" # initial_auth, connecting_to_game, waiting_for_ticket, waiting_for_server_list, authenticated
 
-## Track if we've received the welcome burst (prevents reading after kqz)
-var _received_welcome_burst: bool = false
 
 ## Auth parameters stored for sending on connection (for fallback auth flow)
 var _auth_lang: String = "" # Must be explicitly set via start_connection_for_auth()
@@ -98,21 +96,21 @@ func _process(_delta: float) -> void:
 				_send_kqz_immediate()
 				connected.emit()
 
-			# CRITICAL: Check available bytes AFTER sending kqz
-			# Only read if we haven't received the welcome burst yet
-			if not _received_welcome_burst:
-				var available: int = tcp.get_available_bytes()
-				if available > 0:
-					_bytes_received = available
-					var result: Array = tcp.get_data(available)
-					var err: Error = result[0]
-					var data: PackedByteArray = result[1]
-					if err == OK:
-						if data.size() > 0:
-							buffer.append_array(data)
-							_drain_buffer()
-					else:
-						print("[GameClient] get_data error: %d" % err)
+			# Read whatever is pending. This used to stop after the welcome burst
+			# (jtg) on the belief that nothing else could arrive, but that is exactly
+			# where the world entry starts: kvw is answered with ~330 frames.
+			var available: int = tcp.get_available_bytes()
+			if available > 0:
+				_bytes_received = available
+				var result: Array = tcp.get_data(available)
+				var err: Error = result[0]
+				var data: PackedByteArray = result[1]
+				if err == OK:
+					if data.size() > 0:
+						buffer.append_array(data)
+						_drain_buffer()
+				else:
+					print("[GameClient] get_data error: %d" % err)
 
 		StreamPeerTCP.STATUS_CONNECTING:
 			pass # Still connecting

@@ -262,6 +262,27 @@ kvw {
 GameClient.send_character_selection(character_id)
 ```
 
+### Entrada al mundo: `kvw` → `lqc` → `jru`
+
+Elegir personaje no devuelve un solo bloque. El servidor contesta en tres tandas y
+espera una confirmación entre ellas (`WorldEntry.cs`):
+
+```
+cliente kvw  ->  bloque 1: personaje, stats, quests, almanaque  (~330 mensajes)
+cliente lqc  ->  bloque 2: los cuatro catálogos grandes
+cliente kqo  ->  bloque 3: el mapa, con el jru dentro
+```
+
+- El cliente **debe seguir leyendo** después de `jtg`. Antes se dejaba de llamar a
+  `get_data()` al terminar el burst de bienvenida, y con eso el bloque 1 no entraba nunca.
+- El cliente **sí envía `lqc`** (justo después del `kvw`): es lo que hace que el servidor
+  mande el mapa. Como el servidor manda el bloque 1 y el 2 antes de leer el siguiente
+  frame, el `lqc` se encola detrás y el orden en el cable es el correcto.
+- `jru` trae el mapa en **f2** (`WorldProto.decode_jru`). El bloque 3 incluye el jru y los
+  actores; el cliente solo necesita el id para pedir la geometría con `kkr`.
+- Un fallo de este flujo no rompe la conexión: se queda esperando en silencio. El
+  `GameManager` tiene un temporizador de 15 s que avisa con `MAP_TIMEOUT`.
+
 ### Señal characters_received
 
 La UI recibe la lista de personajes mediante una señal:

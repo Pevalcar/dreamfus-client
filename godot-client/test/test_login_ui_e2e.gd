@@ -61,6 +61,17 @@ func _run() -> void:
 	else:
 		_fail("character selection screen never became visible")
 
+	# Last mile: picking a character sends kvw, the server answers with the world
+	# entry blocks, and Main switches to the game screen.
+	var slot: Node = list.get_child(0)
+	select_ui.character_selected.emit(slot.character_id, slot.character_name)
+
+	var game_container: Node = main.get_node("GameContainer")
+	if await _wait_until(func() -> bool: return game_container.visible, 40.0):
+		print("[PASS] game screen visible after selecting %s" % slot.character_name)
+	else:
+		_fail("game screen never became visible after selecting a character")
+
 	_finish()
 
 
