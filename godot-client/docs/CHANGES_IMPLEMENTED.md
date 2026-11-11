@@ -3,6 +3,57 @@
 ## Resumen
 Se han implementado los siguientes cambios para arreglar el flujo de selección de personajes y agregar soporte para los opcodes de Block 1 (kub, irq, hms, ivx, itg) que transmiten stats, jobs, spells, inventory y shortcut bars después de la selección de personaje.
 
+## Correcciones de WebSocket/TCP - Flujo de Autenticación
+
+### Problema
+El cliente Godot recibía el error "Invalid or expired ticket" al intentar canjear el ticket kqz con el servidor de juego. El flujo WebSocket→TCP fallaba debido a:
+
+1. **Normalización inconsistente del ticket**: `Redeem()` en el servidor no normalizaba el ticket a minúsculas, aunque `Issue()` generaba tickets en minúsculas.
+2. **Timeout insuficiente del WebSocket**: El servidor cerraba el WebSocket a los 100ms, pero el cliente necesitaba tiempo para conectar TCP y enviar el ticket.
+3. **Spam de logs**: El cliente emitía error `WS_FAILED` cuando el WebSocket se cerraba normalmente después de `server_selection_response`.
+
+### Archivos Modificados
+
+#### Servidor: SessionRegistry.cs
+**Archivo:** `jondo-servidor/Jondo.Unity.Server/Network/SessionRegistry.cs`
+- **Línea 460-461**: Agregado `.ToLowerInvariant()` en `Redeem()` para normalizar el ticket
+- El ticket ahora se busca con `value.Trim().ToLowerInvariant()` en lugar de solo `value.Trim()`
+- Coincide con cómo `Issue()` genera tickets: `Convert.ToHexString(...).ToLowerInvariant()`
+
+#### Servidor: SimpleProtocolHandler.cs  
+**Archivo:** `jondo-servidor/Jondo.Unity.Server/Custom/Core/SimpleProtocolHandler.cs`
+- **Línea 270**: Aumentado timeout de `Task.Delay(100)` a `Task.Delay(500)`
+- Da tiempo suficiente al cliente para:
+  1. Recibir `server_selection_response` con ticket
+  2. Conectar TCP al puerto 5555
+  3. Enviar el ticket kqz
+
+#### Cliente: GameClient.gd
+**Archivo:** `godot-client/src/Network/GameClient.gd`
+- **Líneas 70-79**: Implementado `call_deferred("_send_kqz_if_ready")` para evitar race condition
+- **Líneas 163-174**: Nuevo método `_send_kqz_if_ready()` que envía kqz en el siguiente frame
+- Garantiza que `pending_ticket` está establecido antes de enviar kqz al conectar TCP
+- Elimina el envío condicional directo de kqz en `_process()` que podía fallar por timing
+
+### Verificación
+- ✅ Los 32 tests de `KqzProtocolTests` pasan
+- ✅ Ticket generado: 32 caracteres hexadecimales en minúsculas
+- ✅ Formato kqz correcto: `f2 { f1: Any { f1: "type.ankama.com/kqz", f2: { f2: ticket } } }`
+- ✅ Normalización del ticket: cliente usa `strip_edges().to_lower()`, servidor usa `Trim().ToLowerInvariant()`
+- ✅ Timeout de 500ms permite al cliente conectar TCP y enviar kqz
+- ✅ **Flujo kqz verificado**: WebSocket `server_selection_response` → TCP `connect_to_game()` → `call_deferred` → `send_ticket(kqz)` → `kvi` (personajes recibidos)
+- ✅ **Race condition resuelto**: `call_deferred("_send_kqz_if_ready")` garantiza que `pending_ticket` está establecido antes de enviar
+
+### Flujo de Autenticación Corregido
+
+```
+HTTP POST /api/entrar
+    ↓
+WebSocket (5557): auth_request → auth_response → server_selection → server_selection_response(ticket)
+    ↓ (500ms timeout for client to connect TCP)
+TCP (5555): send_ticket(kqz) → kvi(personajes)
+```
+
 ## Cambios Completados
 
 ### 1. ByteArrayExtensions.gd - Extensión de utilidades para byte arrays

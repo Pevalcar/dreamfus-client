@@ -95,6 +95,6 @@ text = "Puerto:"
 [node name="ServerPortSpin" type="SpinBox" parent="VBoxContainer/ServerConfig" unique_id=527039494]
 layout_mode = 2
 max_value = 65535.0
-value = 5557.0
+value = 5555.0
 
 [node name="HTTPRequest" type="HTTPRequest" parent="." unique_id=150252223]

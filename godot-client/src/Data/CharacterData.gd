@@ -1,15 +1,27 @@
 # CharacterData.gd - Player character data model
+# Note: Plain data class that can be used as a Node for character selection
 class_name CharacterData
-extends Resource
+extends Node
 
 # Character identification
 @export var character_id: int = 0
 @export var character_name: String = ""
+@export var display_name: String = ""  # Alias for compatibility with GameUI
+
+# Property alias for character_id (CharacterData.id -> character_id)
+func get_id() -> int:
+	return character_id
+
+func set_id(value: int) -> void:
+	character_id = value
 
 # Basic attributes
 @export var level: int = 1
 @export var experience: int = 0
 @export var next_level_experience: int = 0
+
+# Breed
+@export var breed: int = 0
 
 # Economy
 @export var kamas: int = 0
@@ -105,7 +117,9 @@ func has_job(profession: int) -> bool:
 # Save character state to dictionary
 func to_dict() -> Dictionary:
 	return {
+		"id": character_id,
 		"character_id": character_id,
+		"name": character_name,
 		"character_name": character_name,
 		"level": level,
 		"experience": experience,
@@ -121,10 +135,14 @@ func to_dict() -> Dictionary:
 
 # Load character state from dictionary
 func from_dict(data: Dictionary) -> void:
+	if data.has("id"):
+		character_id = data.id
 	if data.has("character_id"):
 		character_id = data.character_id
 	if data.has("character_name"):
 		character_name = data.character_name
+	if data.has("name"):
+		character_name = data.name  # Keep both in sync
 	if data.has("level"):
 		level = data.level
 	if data.has("experience"):

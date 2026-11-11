@@ -1,10 +1,90 @@
+class_name WorldProto
 # WorldProto.gd - Protocol decoders for world opcodes
 extends RefCounted
-class_name WorldProto
 
 ## Preload helpers
 const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
 const Proto = preload("res://src/Network/Proto.gd")
+
+
+# kvi: character list (server sends in welcome burst)
+# Format (verified against ConnectionProtocol.cs and docs/PROTOCOL.md):
+#   kvi { f1: [Character ...] }
+#   Character { f1: CharacterDetails, f2: characterId }
+#   CharacterDetails { f2: name (string), f3: level, f4: Traits }
+#   Traits { f2: SexContainer { f3: sex }, f6: look (bytes), f7: breed (int32) }
+static func decode_kvi(payload: PackedByteArray) -> Array:
+	if payload == null or payload.size() == 0:
+		return []
+
+	var characters: Array = []
+	var parsed_fields = Proto.parse(payload)
+
+	# kvi.f1 is repeated Character
+	for field in parsed_fields:
+		if field.get("n") == 1 and field.get("w") == Proto.WIRE_LENGTH_DELIMITED and field.has("b"):
+			# Each field["b"] is a Character message
+			var char_fields = Proto.parse(field["b"])
+			var char_data: Dictionary = {}
+
+			# Character.f2 = characterId (int64/varint)
+			var id_field = Proto.first(char_fields, 2)
+			if id_field != null and id_field.has("v"):
+				char_data["id"] = id_field["v"]
+			# Also handle id as int64 (WIRE_VARINT can be encoded differently for larger values)
+			if id_field != null and id_field.has("b"):
+				var id_bytes = id_field["b"]
+				if id_bytes.size() > 0:
+					char_data["id"] = Proto.read_varint(id_bytes, 0)[0] if Proto.read_varint(id_bytes, 0)[0] != null else 0
+
+			# Character.f1 = CharacterDetails
+			var details_field = Proto.first(char_fields, 1)
+			if details_field != null and details_field.has("b"):
+				var detail_fields = Proto.parse(details_field["b"])
+
+				# Name (f2 string)
+				var name_field = Proto.first(detail_fields, 2)
+				if name_field != null and name_field.has("b"):
+					char_data["name"] = name_field["b"].get_string_from_utf8()
+
+				# Level (f3 varint)
+				var level_field = Proto.first(detail_fields, 3)
+				if level_field != null and level_field.has("v"):
+					char_data["level"] = level_field["v"]
+
+				# Traits (f4 length-delimited)
+				var traits_field = Proto.first(detail_fields, 4)
+				if traits_field != null and traits_field.has("b"):
+					var traits_fields = Proto.parse(traits_field["b"])
+
+					# Breed (f7 varint inside traits)
+					var breed_field = Proto.first(traits_fields, 7)
+					if breed_field != null and breed_field.has("v"):
+						char_data["breed"] = breed_field["v"]
+
+					# Look (f6 bytes inside traits)
+					var look_field = Proto.first(traits_fields, 6)
+					if look_field != null and look_field.has("b"):
+						char_data["look"] = look_field["b"]
+
+					# SexContainer (f2 length-delimited inside traits)
+					var sex_container_field = Proto.first(traits_fields, 2)
+					if sex_container_field != null and sex_container_field.has("b"):
+						var sex_fields = Proto.parse(sex_container_field["b"])
+						var sex_field = Proto.first(sex_fields, 3)
+						if sex_field != null and sex_field.has("v"):
+							char_data["sex"] = sex_field["v"]
+
+			if char_data.has("name") or char_data.has("id"):
+				characters.append(char_data)
+
+	return characters
+
+
+# kvi: character list - decode_kvi is now a proper decoder
+# Used by GameManager._handle_kvi_messages()
+func _test_decode_kvi() -> void:
+	pass  # Placeholder for testing
 
 
 # jru: map change notification from server
@@ -16,7 +96,6 @@ static func decode_jru(payload: PackedByteArray) -> Dictionary:
 	var ba = payload
 	var pos = 0
 	var map_id = 0
-
 	while pos < ba.size():
 		var tag = ba[pos]
 		var field_num = tag >> 3
@@ -42,7 +121,7 @@ static func decode_jru(payload: PackedByteArray) -> Dictionary:
 # kkr: map data response (server sends map geometry)
 static func decode_kkr(payload: PackedByteArray) -> Dictionary:
 	if payload == null or payload.size() == 0:
-		return { "map_id": 0, "sub_area_id": 0, "map_ids": [], "neighbours": {}, "found": false }
+		return { "map_id": 0, "sub_area_id": 0, "map_ids": [], "neighbours": { }, "found": false }
 
 	var ba = payload
 	var pos = 0
@@ -81,7 +160,7 @@ static func decode_kkr(payload: PackedByteArray) -> Dictionary:
 					"right": ByteArrayExtensions.read_u32_le(ba, pos),
 					"bottom": ByteArrayExtensions.read_u32_le(ba, pos + 4),
 					"left": ByteArrayExtensions.read_u32_le(ba, pos + 8),
-					"top": ByteArrayExtensions.read_u32_le(ba, pos + 12)
+					"top": ByteArrayExtensions.read_u32_le(ba, pos + 12),
 				}
 		elif field_num == 4: # f4 = mapId (alternative field)
 			map_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
@@ -92,7 +171,7 @@ static func decode_kkr(payload: PackedByteArray) -> Dictionary:
 		"sub_area_id": sub_area_id,
 		"map_ids": map_ids,
 		"neighbours": neighbours,
-		"found": map_id > 0
+		"found": map_id > 0,
 	}
 
 
@@ -100,16 +179,16 @@ static func decode_kkr(payload: PackedByteArray) -> Dictionary:
 # Format: f2 { f1 { f1: characteristic_id, f4/f5/f2: value }, f7: experience, f8: next_level, f9: alignment, f10: kamas }
 static func decode_kub(payload: PackedByteArray) -> Dictionary:
 	if payload == null or payload.size() == 0:
-		return { "stats": {}, "experience": 0, "next_level": 0, "kamas": 0, "found": false }
+		return { "stats": { }, "experience": 0, "next_level": 0, "kamas": 0, "found": false }
 
 	var ba = payload
 	var pos = 0
 
-	var stats: Dictionary = {}
+	var stats: Dictionary = { }
 	var experience: int = 0
 	var next_level: int = 0
 	var kamas: int = 0
-	var alignment: Dictionary = {}
+	var alignment: Dictionary = { }
 
 	while pos < ba.size():
 		var tag = ba[pos]
@@ -158,84 +237,8 @@ static func decode_kub(payload: PackedByteArray) -> Dictionary:
 		"next_level": next_level,
 		"kamas": kamas,
 		"alignment": alignment,
-		"found": stats.size() > 0
+		"found": stats.size() > 0,
 	}
-
-# Helper to parse a single stat entry from kub
-static func _parse_kub_stat(data: PackedByteArray) -> Dictionary:
-	if data == null or data.size() == 0:
-		return { "id": 0, "values": {} }
-
-	var ba = data
-	var pos = 0
-
-	var stat_id: int = 0
-	var values: Dictionary = {}
-
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		pos += 1
-
-		if field_num == 1: # f1 = stat_id (varint)
-			stat_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 2: # f2 = base value (varint)
-			var val = Proto.read_varint(ba, pos)
-			values.base = val[0] if val[0] != null else 0
-			pos = val[1] if val[0] != null else pos + _varint_size(ba, pos)
-		elif field_num == 4: # f4 = scroll value (varint)
-			var val = Proto.read_varint(ba, pos)
-			values.scroll = val[0] if val[0] != null else 0
-			pos = val[1] if val[0] != null else pos + _varint_size(ba, pos)
-		elif field_num == 5: # f5 = equipment value (varint)
-			var val = Proto.read_varint(ba, pos)
-			values.equipment = val[0] if val[0] != null else 0
-			pos = val[1] if val[0] != null else pos + _varint_size(ba, pos)
-		else:
-			pos += _field_size(ba, pos)
-
-	return { "id": stat_id, "values": values }
-
-# Helper to parse alignment block from kub
-static func _parse_kub_alignment(data: PackedByteArray) -> Dictionary:
-	if data == null or data.size() == 0:
-		return { "side": 0, "grade": 0, "honor": 0 }
-
-	var ba = data
-	var pos = 0
-
-	var level: int = 0
-	var side: int = 0
-	var honor: int = 0
-	var grade: int = 0
-
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		var wire_type = tag & 0x7
-		pos += 1
-
-		if field_num == 1: # f1 = alignment level
-			level = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 2: # f2 = alignment side
-			side = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 3: # f3 = alignment data block
-			var len_result = Proto.read_varint(ba, pos)
-			if len_result[0] != null:
-				pos = len_result[1]
-		elif field_num == 4: # f4 = shown grade
-			grade = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 5: # f5 = next grade honor
-			honor = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		else:
-			pos += _field_size(ba, pos)
-
-	return { "level": level, "side": side, "honor": honor, "grade": grade }
 
 
 # irq: player jobs/professions
@@ -270,55 +273,7 @@ static func decode_irq(payload: PackedByteArray) -> Dictionary:
 		else:
 			pos += _field_size(ba, pos)
 
-	return {
-		"jobs": jobs,
-		"found": jobs.size() > 0
-	}
-
-# Helper to parse a single job from irq
-static func _parse_irq_job(data: PackedByteArray) -> Dictionary:
-	if data == null or data.size() == 0:
-		return {}
-
-	var ba = data
-	var pos = 0
-
-	var profession: int = 0
-	var level: int = 0
-	var next_level: int = 0
-	var floor: int = 0
-	var total: int = 0
-
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		pos += 1
-
-		if field_num == 1: # f1 = profession
-			profession = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 2: # f2 = next_level
-			next_level = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 3: # f3 = level
-			level = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 4: # f4 = floor (for professions like Alchimist)
-			floor = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 5: # f5 = total (total level points)
-			total = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		else:
-			pos += _field_size(ba, pos)
-
-	return {
-		"profession": profession,
-		"level": level,
-		"next_level": next_level,
-		"floor": floor,
-		"total": total
-	}
+	return { "jobs": jobs, "found": jobs.size() > 0 }
 
 
 # hms: spell list (player's learned spells)
@@ -357,46 +312,7 @@ static func decode_hms(payload: PackedByteArray) -> Dictionary:
 		else:
 			pos += _field_size(ba, pos)
 
-	return {
-		"spells": spells,
-		"end_marker": end_marker,
-		"found": spells.size() > 0
-	}
-
-# Helper to parse a single spell from hms
-static func _parse_hms_spell(data: PackedByteArray) -> Dictionary:
-	if data == null or data.size() == 0:
-		return {}
-
-	var ba = data
-	var pos = 0
-
-	var grade: int = 0
-	var spell_id: int = 0
-	var origin: int = 0 # 1 = standard, 2 = special
-
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		pos += 1
-
-		if field_num == 1: # f1 = grade/varint
-			grade = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 3: # f3 = spell_id
-			spell_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 4: # f4 = origin
-			origin = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		else:
-			pos += _field_size(ba, pos)
-
-	return {
-		"grade": grade,
-		"spell_id": spell_id,
-		"origin": origin
-	}
+	return { "spells": spells, "end_marker": end_marker, "found": spells.size() > 0 }
 
 
 # ivx: inventory items
@@ -435,92 +351,7 @@ static func decode_ivx(payload: PackedByteArray) -> Dictionary:
 		else:
 			pos += _field_size(ba, pos)
 
-	return {
-		"kamas": kamas,
-		"items": items,
-		"found": items.size() > 0 or kamas > 0
-	}
-
-# Helper to parse a single inventory item from ivx
-static func _parse_ivx_item(data: PackedByteArray) -> Dictionary:
-	if data == null or data.size() == 0:
-		return {}
-
-	var ba = data
-	var pos = 0
-
-	var slot: int = 0
-	var template: int = 0
-	var count: int = 0
-	var uid: int = 0
-	var effects: Array = []
-
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		pos += 1
-
-		if field_num == 1: # f1 = slot
-			slot = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 3: # f3 = count
-			count = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 4: # f4 = uid
-			uid = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 5: # f5 = item body (length-delimited)
-			var len_result = Proto.read_varint(ba, pos)
-			if len_result[0] == null:
-				break
-			var len = len_result[0]
-			var data_pos = len_result[1]
-
-			if data_pos + len <= ba.size():
-				var body_bytes = ByteArrayExtensions.byte_subarray(ba, data_pos, len)
-				var item_body = _parse_ivx_item_body(body_bytes)
-				if item_body != null:
-					template = item_body.template
-					effects = item_body.effects
-			pos = data_pos + len
-		else:
-			pos += _field_size(ba, pos)
-
-	return {
-		"slot": slot,
-		"template": template,
-		"count": count,
-		"uid": uid,
-		"effects": effects
-	}
-
-# Helper to parse item body from ivx f5 field
-static func _parse_ivx_item_body(data: PackedByteArray) -> Dictionary:
-	if data == null or data.size() == 0:
-		return { "template": 0, "effects": [] }
-
-	var ba = data
-	var pos = 0
-
-	var template: int = 0
-	var effects: Array = []
-
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		pos += 1
-
-		if field_num == 1: # f1 = template id
-			template = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		elif field_num == 11: # f11 = effect id
-			var effect_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-			effects.append({ "id": effect_id })
-		else:
-			pos += _field_size(ba, pos)
-
-	return { "template": template, "effects": effects }
+	return { "kamas": kamas, "items": items, "found": items.size() > 0 or kamas > 0 }
 
 
 # itg: shortcut bar (spells and items)
@@ -564,16 +395,298 @@ static func decode_itg(payload: PackedByteArray) -> Dictionary:
 		else:
 			pos += _field_size(ba, pos)
 
+	return { "bar_type": bar_type, "shortcuts": shortcuts, "found": shortcuts.size() > 0 }
+
+
+# kvw: character info (client sends, server responds to get character details)
+# This is sent by client to request character data after jtg
+static func decode_kvw(payload: PackedByteArray) -> Dictionary:
+	if payload == null or payload.size() == 0:
+		return { "character_id": 0, "found": false }
+
+	var ba = payload
+	var pos = 0
+	var character_id: int = 0
+
+	# kvw is typically very simple - just contains character ID in f1.f1.f1
+	# The format is: each field is a varint, field 1 contains the character ID
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		pos += 1
+
+		if field_num == 1: # f1 = character data
+			character_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		else:
+			pos += _field_size(ba, pos)
+
+	return { "character_id": character_id, "found": character_id > 0 }
+
+
+# kva: character alive (server sends this to indicate character is available)
+# This is sent by server after kvw to confirm the character can receive Block 1
+static func decode_kva(payload: PackedByteArray) -> Dictionary:
+	if payload == null or payload.size() == 0:
+		return { "alive": false, "found": false }
+
+	var ba = payload
+	var pos = 0
+	var alive: bool = false
+
+	# kva format: various fields indicating character state
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		pos += 1
+
+		if field_num == 1: # Presence
+			var val = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			alive = val == 1
+			pos += _varint_size(ba, pos)
+		else:
+			pos += _field_size(ba, pos)
+
+	return { "alive": alive, "found": true }
+
+
+# Helper to parse a single stat entry from kub
+static func _parse_kub_stat(data: PackedByteArray) -> Dictionary:
+	if data == null or data.size() == 0:
+		return { "id": 0, "values": { } }
+
+	var ba = data
+	var pos = 0
+
+	var stat_id: int = 0
+	var values: Dictionary = { }
+
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		pos += 1
+
+		if field_num == 1: # f1 = stat_id (varint)
+			stat_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 2: # f2 = base value (varint)
+			var val = Proto.read_varint(ba, pos)
+			values.base = val[0] if val[0] != null else 0
+			pos = val[1] if val[0] != null else pos + _varint_size(ba, pos)
+		elif field_num == 4: # f4 = scroll value (varint)
+			var val = Proto.read_varint(ba, pos)
+			values.scroll = val[0] if val[0] != null else 0
+			pos = val[1] if val[0] != null else pos + _varint_size(ba, pos)
+		elif field_num == 5: # f5 = equipment value (varint)
+			var val = Proto.read_varint(ba, pos)
+			values.equipment = val[0] if val[0] != null else 0
+			pos = val[1] if val[0] != null else pos + _varint_size(ba, pos)
+		else:
+			pos += _field_size(ba, pos)
+
+	return { "id": stat_id, "values": values }
+
+
+# Helper to parse alignment block from kub
+static func _parse_kub_alignment(data: PackedByteArray) -> Dictionary:
+	if data == null or data.size() == 0:
+		return { "side": 0, "grade": 0, "honor": 0 }
+
+	var ba = data
+	var pos = 0
+
+	var level: int = 0
+	var side: int = 0
+	var honor: int = 0
+	var grade: int = 0
+
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		var wire_type = tag & 0x7
+		pos += 1
+
+		if field_num == 1: # f1 = alignment level
+			level = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 2: # f2 = alignment side
+			side = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 3: # f3 = alignment data block
+			var len_result = Proto.read_varint(ba, pos)
+			if len_result[0] != null:
+				pos = len_result[1]
+		elif field_num == 4: # f4 = shown grade
+			grade = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 5: # f5 = next grade honor
+			honor = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		else:
+			pos += _field_size(ba, pos)
+
+	return { "level": level, "side": side, "honor": honor, "grade": grade }
+
+
+# Helper to parse a single job from irq
+static func _parse_irq_job(data: PackedByteArray) -> Dictionary:
+	if data == null or data.size() == 0:
+		return { }
+
+	var ba = data
+	var pos = 0
+
+	var profession: int = 0
+	var level: int = 0
+	var next_level: int = 0
+	var floor: int = 0
+	var total: int = 0
+
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		pos += 1
+
+		if field_num == 1: # f1 = profession
+			profession = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 2: # f2 = next_level
+			next_level = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 3: # f3 = level
+			level = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 4: # f4 = floor (for professions like Alchimist)
+			floor = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 5: # f5 = total (total level points)
+			total = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		else:
+			pos += _field_size(ba, pos)
+
 	return {
-		"bar_type": bar_type,
-		"shortcuts": shortcuts,
-		"found": shortcuts.size() > 0
+		"profession": profession,
+		"level": level,
+		"next_level": next_level,
+		"floor": floor,
+		"total": total,
 	}
+
+
+# Helper to parse a single spell from hms
+static func _parse_hms_spell(data: PackedByteArray) -> Dictionary:
+	if data == null or data.size() == 0:
+		return { }
+
+	var ba = data
+	var pos = 0
+
+	var grade: int = 0
+	var spell_id: int = 0
+	var origin: int = 0 # 1 = standard, 2 = special
+
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		pos += 1
+
+		if field_num == 1: # f1 = grade/varint
+			grade = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 3: # f3 = spell_id
+			spell_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 4: # f4 = origin
+			origin = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		else:
+			pos += _field_size(ba, pos)
+
+	return { "grade": grade, "spell_id": spell_id, "origin": origin }
+
+
+# Helper to parse a single inventory item from ivx
+static func _parse_ivx_item(data: PackedByteArray) -> Dictionary:
+	if data == null or data.size() == 0:
+		return { }
+
+	var ba = data
+	var pos = 0
+
+	var slot: int = 0
+	var template: int = 0
+	var count: int = 0
+	var uid: int = 0
+	var effects: Array = []
+
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		pos += 1
+
+		if field_num == 1: # f1 = slot
+			slot = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 3: # f3 = count
+			count = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 4: # f4 = uid
+			uid = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 5: # f5 = item body (length-delimited)
+			var len_result = Proto.read_varint(ba, pos)
+			if len_result[0] == null:
+				break
+			var len = len_result[0]
+			var data_pos = len_result[1]
+
+			if data_pos + len <= ba.size():
+				var body_bytes = ByteArrayExtensions.byte_subarray(ba, data_pos, len)
+				var item_body = _parse_ivx_item_body(body_bytes)
+				if item_body != null:
+					template = item_body.template
+					effects = item_body.effects
+			pos = data_pos + len
+		else:
+			pos += _field_size(ba, pos)
+
+	return { "slot": slot, "template": template, "count": count, "uid": uid, "effects": effects }
+
+
+# Helper to parse item body from ivx f5 field
+static func _parse_ivx_item_body(data: PackedByteArray) -> Dictionary:
+	if data == null or data.size() == 0:
+		return { "template": 0, "effects": [] }
+
+	var ba = data
+	var pos = 0
+
+	var template: int = 0
+	var effects: Array = []
+
+	while pos < ba.size():
+		var tag = ba[pos]
+		var field_num = tag >> 3
+		pos += 1
+
+		if field_num == 1: # f1 = template id
+			template = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+		elif field_num == 11: # f11 = effect id
+			var effect_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
+			pos += _varint_size(ba, pos)
+			effects.append({ "id": effect_id })
+		else:
+			pos += _field_size(ba, pos)
+
+	return { "template": template, "effects": effects }
+
 
 # Helper to parse a single shortcut from itg
 static func _parse_itg_shortcut(data: PackedByteArray) -> Dictionary:
 	if data == null or data.size() == 0:
-		return {}
+		return { }
 
 	var ba = data
 	var pos = 0
@@ -624,6 +737,7 @@ static func _parse_itg_shortcut(data: PackedByteArray) -> Dictionary:
 		"is_item": is_item,
 	}
 
+
 # Helper to parse spell reference from itg f6
 static func _parse_itg_spell_ref(data: PackedByteArray) -> int:
 	if data == null or data.size() == 0:
@@ -645,6 +759,7 @@ static func _parse_itg_spell_ref(data: PackedByteArray) -> int:
 			pos += _field_size(ba, pos)
 
 	return spell_id
+
 
 # Helper to parse item reference from itg f9
 static func _parse_itg_item_ref(data: PackedByteArray) -> int:
@@ -668,6 +783,7 @@ static func _parse_itg_item_ref(data: PackedByteArray) -> int:
 
 	return item_template
 
+
 # Helper function to calculate field size based on wire type
 static func _field_size(ba: PackedByteArray, pos: int) -> int:
 	if pos >= ba.size():
@@ -686,6 +802,7 @@ static func _field_size(ba: PackedByteArray, pos: int) -> int:
 		return 4
 	return 1
 
+
 # Helper function to calculate VarInt size
 static func _varint_size(ba: PackedByteArray, pos: int) -> int:
 	if pos >= ba.size():
@@ -697,65 +814,8 @@ static func _varint_size(ba: PackedByteArray, pos: int) -> int:
 		byte = ba[pos + count]
 	return count + 1
 
+
 # Simple VarInt reader (returns just the value, not position)
 static func _read_varint(ba: PackedByteArray, pos: int) -> int:
 	var result = Proto.read_varint(ba, pos)
 	return result[0] if result[0] != null else 0
-
-
-# kvw: character info (client sends, server responds to get character details)
-# This is sent by client to request character data after jtg
-static func decode_kvw(payload: PackedByteArray) -> Dictionary:
-	if payload == null or payload.size() == 0:
-		return { "character_id": 0, "found": false }
-
-	var ba = payload
-	var pos = 0
-	var character_id: int = 0
-
-	# kvw is typically very simple - just contains character ID in f1.f1.f1
-	# The format is: each field is a varint, field 1 contains the character ID
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		pos += 1
-
-		if field_num == 1: # f1 = character data
-			character_id = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			pos += _varint_size(ba, pos)
-		else:
-			pos += _field_size(ba, pos)
-
-	return {
-		"character_id": character_id,
-		"found": character_id > 0
-	}
-
-
-# kva: character alive (server sends this to indicate character is available)
-# This is sent by server after kvw to confirm the character can receive Block 1
-static func decode_kva(payload: PackedByteArray) -> Dictionary:
-	if payload == null or payload.size() == 0:
-		return { "alive": false, "found": false }
-
-	var ba = payload
-	var pos = 0
-	var alive: bool = false
-
-	# kva format: various fields indicating character state
-	while pos < ba.size():
-		var tag = ba[pos]
-		var field_num = tag >> 3
-		pos += 1
-
-		if field_num == 1: # Presence
-			var val = Proto.read_varint(ba, pos)[0] if Proto.read_varint(ba, pos)[0] != null else 0
-			alive = val == 1
-			pos += _varint_size(ba, pos)
-		else:
-			pos += _field_size(ba, pos)
-
-	return {
-		"alive": alive,
-		"found": true
-	}
