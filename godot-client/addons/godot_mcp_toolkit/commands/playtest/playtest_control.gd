@@ -19,37 +19,39 @@ const Helpers = Modules.CommandHelpers
 const RuntimeOptOut = Modules.RuntimeOptOut
 const DebugSessionTracker = Modules.DebugSessionTracker
 const MCPAuth := preload("res://addons/godot_mcp_toolkit/security/auth.gd")
-const _LogReader := preload("res://addons/godot_mcp_toolkit/commands/playtest_log_reader.gd")
 
 const RUNTIME_HOST := "127.0.0.1"
 const RUNTIME_POLL_TIMEOUT_MS := 5000
+const _LogReader := preload("res://addons/godot_mcp_toolkit/commands/playtest_log_reader.gd")
 const _REGISTRY_POLL_INTERVAL_MS := 100
 
 
 # -- Commands -----------------------------------------------------------------
-
-
 static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 	# A headless editor cannot launch the game process, so the runtime (Mode B) never
 	# comes up — the pre-guard success:true was a false-success (nothing stays playing).
 	# Fail deterministically like editor.screenshot so an LLM branches instead of polling
 	# a runtime that will never connect. Display path is byte-identical below the guard.
 	if Modules.VersionUtils.is_headless():
-		return MCPToolkitError.fail("HEADLESS_UNSUPPORTED",
-			"playtest requires a display server (the game process cannot be launched headless) — use script_check, scene/node inspection, or editor_get_console for verification.")
+		return MCPToolkitError.fail(
+			"HEADLESS_UNSUPPORTED",
+			"playtest requires a display server (the game process cannot be launched headless) — use script_check, scene/node inspection, or editor_get_console for verification.",
+		)
 
 	var target := str(parameters.get("scene_path", "current"))
 	var wait_for_runtime_raw = parameters.get("wait_for_runtime", true)
 	var wait_for_runtime := bool(wait_for_runtime_raw) \
-		if typeof(wait_for_runtime_raw) == TYPE_BOOL else true
+			if typeof(wait_for_runtime_raw) == TYPE_BOOL else true
 	var runtime_poll_raw = parameters.get("runtime_poll", false)
 	var runtime_poll := bool(runtime_poll_raw) \
-		if typeof(runtime_poll_raw) == TYPE_BOOL else false
+			if typeof(runtime_poll_raw) == TYPE_BOOL else false
 	var if_running := str(parameters.get("if_running", "fail"))
 
 	if not (if_running in ["return", "fail"]):
-		return MCPToolkitError.fail("INVALID_PARAMS",
-			"if_running must be 'return' or 'fail' (got %s); default is 'fail'" % if_running)
+		return MCPToolkitError.fail(
+			"INVALID_PARAMS",
+			"if_running must be 'return' or 'fail' (got %s); default is 'fail'" % if_running,
+		)
 
 	if runtime_poll:
 		if not EditorInterface.is_playing_scene():
@@ -57,16 +59,26 @@ static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 			# nothing was running to probe. An empty buffer can't prove a compile failure,
 			# so diagnose by captured evidence rather than asserting a cause.
 			var comp := _scan_compilation_errors()
-			var diag := _diagnose_startup(comp, false, Modules.VersionUtils.get_engine_version_pair())
+			var diag := _diagnose_startup(
+				comp,
+				false,
+				Modules.VersionUtils.get_engine_version_pair(),
+			)
 			return MCPToolkitError.fail(diag["code"], diag["message"], diag["hint"])
 	else:
 		if EditorInterface.is_playing_scene():
 			if if_running == "return":
 				var runtime_port := RegistryClient.get_runtime_port()
-				return MCPToolkitSuccess.ok({"status": "already_running",
-					"runtime_port": runtime_port if runtime_port > 0 else null})
-			return MCPToolkitError.fail("ALREADY_PLAYING",
-				"a game is already running; call game.stop first, or use runtime_poll:true to re-probe the runtime connection")
+				return MCPToolkitSuccess.ok(
+					{
+						"status": "already_running",
+						"runtime_port": runtime_port if runtime_port > 0 else null,
+					}
+				)
+			return MCPToolkitError.fail(
+				"ALREADY_PLAYING",
+				"a game is already running; call game.stop first, or use runtime_poll:true to re-probe the runtime connection",
+			)
 
 		# Mark that a play session has started so the editor-side debugger.get_log
 		# cache reads the game's log. The engine truncates godot.log fresh on every
@@ -81,26 +93,35 @@ static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 				# misreads it as COMPILATION_FAILED). Fail deterministically instead —
 				# mirrors the "current" branch's NO_SCENE guard.
 				if _main_scene_missing():
-					return MCPToolkitError.fail("NO_SCENE",
+					return MCPToolkitError.fail(
+						"NO_SCENE",
 						"no main scene set — set one in Project Settings > Application > Run > Main Scene "
 						+ "(or project_set_setting application/run/main_scene='res://YourScene.tscn'), "
-						+ "or use target:'current' or a res:// scene path.")
+						+ "or use target:'current' or a res:// scene path.",
+					)
 				EditorInterface.play_main_scene()
 			"current":
 				if Helpers.get_edited_root() == null:
-					return MCPToolkitError.fail("NO_SCENE",
-						"no currently-edited scene; use target:'main' or target:<res://path>, or scene.open first")
+					return MCPToolkitError.fail(
+						"NO_SCENE",
+						"no currently-edited scene; use target:'main' or target:<res://path>, or scene.open first",
+					)
 				EditorInterface.play_current_scene()
 			_:
 				var guard := FileGuard.resolve_safe(target)
 				if guard["error"] != null:
 					return MCPToolkitError.fail("PATH_DENIED", str(guard["reason"]))
 				if target.get_extension().to_lower() != "tscn":
-					return MCPToolkitError.fail("INVALID_PATH",
-						"game.start only plays .tscn files (got %s)" % target)
+					return MCPToolkitError.fail(
+						"INVALID_PATH",
+						"game.start only plays .tscn files (got %s)" % target,
+					)
 				if not FileAccess.file_exists(target):
-					return MCPToolkitError.fail("NOT_FOUND",
-						"no scene file at %s; use scene.create first" % target, MCPToolkitError.HINT_FILE_PATH)
+					return MCPToolkitError.fail(
+						"NOT_FOUND",
+						"no scene file at %s; use scene.create first" % target,
+						MCPToolkitError.HINT_FILE_PATH,
+					)
 				EditorInterface.play_custom_scene(target)
 
 	# Runtime readiness check.
@@ -119,8 +140,7 @@ static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 			await Engine.get_main_loop().create_timer(_REGISTRY_POLL_INTERVAL_MS / 1000.0).timeout
 		if runtime_port > 0:
 			var remaining := maxi(500, deadline - Time.get_ticks_msec())
-			var probe := await _poll_runtime_ready(
-				RUNTIME_HOST, runtime_port, remaining)
+			var probe := await _poll_runtime_ready(RUNTIME_HOST, runtime_port, remaining)
 			runtime_ready = probe["ready"]
 			if not runtime_ready:
 				runtime_failure = str(probe.get("failure", "unknown"))
@@ -134,11 +154,13 @@ static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 		#   game_start(if_running:"return", runtime_poll:true)
 		bridge_discovery = true
 
-	var response := MCPToolkitSuccess.ok({
-		"target": target,
-		"runtime_port": runtime_port if runtime_port > 0 else null,
-		"runtime_ready": runtime_ready,
-	})
+	var response := MCPToolkitSuccess.ok(
+		{
+			"target": target,
+			"runtime_port": runtime_port if runtime_port > 0 else null,
+			"runtime_ready": runtime_ready,
+		}
+	)
 	if bridge_discovery:
 		response["runtime_discovery"] = "bridge"
 		# Hint text suppressed when wait_for_runtime=true — the MCP server
@@ -158,16 +180,23 @@ static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 		response["runtime_failure"] = runtime_failure
 		match runtime_failure:
 			"registry_timeout":
-				var debugger_hint := _registry_timeout_hint(EditorInterface.is_playing_scene(),
-						_LogReader.get_debug_state(), _LogReader.get_break_reason(),
-						_LogReader.get_break_location())
+				var debugger_hint := _registry_timeout_hint(
+					EditorInterface.is_playing_scene(),
+					_LogReader.get_debug_state(),
+					_LogReader.get_break_reason(),
+					_LogReader.get_break_location(),
+				)
 				if debugger_hint.is_empty():
 					# The game was playing when the poll began but has stopped — a
 					# ran-then-died soft path, framed as a runtime crash (it began
 					# running, so a compile error is unlikely). runtime_ready:false +
 					# runtime_failure:"registry_timeout" are the honest structured signals.
 					var comp := _scan_compilation_errors()
-					var diag := _diagnose_startup(comp, true, Modules.VersionUtils.get_engine_version_pair())
+					var diag := _diagnose_startup(
+						comp,
+						true,
+						Modules.VersionUtils.get_engine_version_pair(),
+					)
 					response["hint"] = diag["hint"]
 					if not (diag["errors"] as Array).is_empty():
 						response["compilation_errors"] = diag["errors"]
@@ -197,8 +226,14 @@ static func cmd_game_start(parameters: Dictionary) -> Dictionary:
 	var opt_out_hint := _runtime_opt_out_hint()
 	if not opt_out_hint.is_empty():
 		response["hint"] = opt_out_hint if not response.has("hint") \
-			else "%s %s" % [opt_out_hint, response["hint"]]
+				else "%s %s" % [opt_out_hint, response["hint"]]
 	return response
+
+
+static func cmd_game_stop(_parameters: Dictionary) -> Dictionary:
+	var was_running := EditorInterface.is_playing_scene()
+	EditorInterface.stop_playing_scene()
+	return MCPToolkitSuccess.ok({ "was_running": was_running })
 
 
 ## Returns a hint naming the runtime opt-out when this editor's environment sets
@@ -222,40 +257,34 @@ static func _runtime_opt_out_hint() -> String:
 ## let play_main_scene() pop the engine's undismissable "No main scene has ever been
 ## defined" modal (which returns silently → a false success). Pure query; unit-tested.
 static func _main_scene_missing() -> bool:
-	return str(ProjectSettings.get_setting("application/run/main_scene", "")).strip_edges().is_empty()
-
-
-static func cmd_game_stop(_parameters: Dictionary) -> Dictionary:
-	var was_running := EditorInterface.is_playing_scene()
-	EditorInterface.stop_playing_scene()
-	return MCPToolkitSuccess.ok({"was_running": was_running})
+	return str(ProjectSettings.get_setting("application/run/main_scene", "")) \
+			.strip_edges() \
+			.is_empty()
 
 
 # -- Runtime probe ------------------------------------------------------------
-
-
 ## WebSocket health-check: connect, authenticate, send ping, wait for response.
 ## Only reports true when the full JSON-RPC layer is operational (no false
 ## positives from a TCP-only probe).
 ## Returns {"ready": true} on success, or {"ready": false, "failure": <stage>}
 ## where stage is one of: token_read_failed, ws_connect_timeout, auth_timeout,
 ## ping_timeout.
-static func _poll_runtime_ready(
-	host: String, port: int, timeout_ms: int,
-) -> Dictionary:
+static func _poll_runtime_ready(host: String, port: int, timeout_ms: int) -> Dictionary:
 	var token_path := MCPAuth.get_token_path()
 	var token_file := FileAccess.open(token_path, FileAccess.READ)
 	if token_file == null:
-		return {"ready": false, "failure": "token_read_failed"}
+		return { "ready": false, "failure": "token_read_failed" }
 	var token := token_file.get_as_text().strip_edges()
 	token_file.close()
 	if token.is_empty():
-		return {"ready": false, "failure": "token_read_failed"}
+		return { "ready": false, "failure": "token_read_failed" }
 
 	var furthest := "ws_connect_timeout"
 	var deadline := Time.get_ticks_msec() + timeout_ms
 	while Time.get_ticks_msec() < deadline:
 		var ws := WebSocketPeer.new()
+		ws.inbound_buffer_size = 262144 # 1 MB buffer for incoming data
+		ws.outbound_buffer_size = 262144 # 1 MB buffer for outgoing data
 		var err := ws.connect_to_url("ws://%s:%d" % [host, port])
 		if err != OK:
 			await Engine.get_main_loop().create_timer(0.1).timeout
@@ -277,7 +306,7 @@ static func _poll_runtime_ready(
 				furthest = "auth_timeout"
 
 			if not auth_sent:
-				ws.send_text(JSON.stringify({"auth": token}))
+				ws.send_text(JSON.stringify({ "auth": token }))
 				auth_sent = true
 				await Engine.get_main_loop().create_timer(0.01).timeout
 				continue
@@ -292,20 +321,21 @@ static func _poll_runtime_ready(
 					continue
 				if not ping_sent:
 					if msg.get("authed", false) == true:
-						ws.send_text(JSON.stringify({
-							"jsonrpc": "2.0", "method": "ping", "id": 0}))
+						ws.send_text(
+							JSON.stringify({ "jsonrpc": "2.0", "method": "ping", "id": 0 })
+						)
 						ping_sent = true
 						furthest = "ping_timeout"
 				else:
 					if msg.has("result"):
 						ws.close(1000)
-						return {"ready": true}
+						return { "ready": true }
 
 			await Engine.get_main_loop().create_timer(0.01).timeout
 
 		ws.close()
 		await Engine.get_main_loop().create_timer(0.1).timeout
-	return {"ready": false, "failure": furthest}
+	return { "ready": false, "failure": furthest }
 
 
 ## Scan LogBuffer for recent errors — used to detect compilation failures
@@ -342,7 +372,9 @@ static func _scan_compilation_errors() -> Dictionary:
 ## a cause. A game that ran then stopped is framed as a runtime crash, not a compile
 ## error (it began running).
 static func _diagnose_startup(
-	comp: Dictionary, was_running: bool, version_pair: String,
+	comp: Dictionary,
+	was_running: bool,
+	version_pair: String,
 ) -> Dictionary:
 	# comp[...] is Variant at the JSON-shaped scan boundary → coerce, never infer.
 	var found := bool(comp.get("found", false))
@@ -352,7 +384,8 @@ static func _diagnose_startup(
 	# the agent knows the empty buffer may be a capture limit, not a clean startup.
 	var file_tail_caveat := (
 		" (Godot %s tails the log file and can miss compile errors.)" % version_pair
-		if is_file_tail else ""
+		if is_file_tail
+		else ""
 	)
 
 	if found:
@@ -360,13 +393,16 @@ static func _diagnose_startup(
 		if was_running:
 			return {
 				"code": "GAME_NOT_RUNNING",
-				"message": "Game stopped mid-probe with errors captured — likely a runtime crash:\n" + joined,
-				"hint": "The game began running, so a compile error is unlikely. Check debugger_get_log or editor_get_console for the crash." + file_tail_caveat,
+				"message": "Game stopped mid-probe with errors captured — likely a runtime crash:\n"
+				+ joined,
+				"hint": "The game began running, so a compile error is unlikely. Check debugger_get_log or editor_get_console for the crash."
+				+ file_tail_caveat,
 				"errors": errors,
 			}
 		return {
 			"code": "COMPILATION_FAILED",
-			"message": "Game failed to start — likely a startup or parse error. Recent errors:\n" + joined,
+			"message": "Game failed to start — likely a startup or parse error. Recent errors:\n"
+			+ joined,
 			"hint": "Fix the errors shown, then call game_start again." + file_tail_caveat,
 			"errors": errors,
 		}
@@ -375,7 +411,8 @@ static func _diagnose_startup(
 		return {
 			"code": "GAME_NOT_RUNNING",
 			"message": "Game started then stopped before the probe completed.",
-			"hint": "Likely a runtime crash or early exit (it began running, so a compile error is unlikely). Check debugger_get_log or editor_get_console." + file_tail_caveat,
+			"hint": "Likely a runtime crash or early exit (it began running, so a compile error is unlikely). Check debugger_get_log or editor_get_console."
+			+ file_tail_caveat,
 			"errors": errors,
 		}
 	return {
@@ -406,8 +443,10 @@ static func _diagnose_startup(
 ## timeout hint when the debugger has not stopped the game, or an empty String when
 ## the editor no longer plays it, for the caller's startup diagnosis.
 static func _registry_timeout_hint(
-	is_playing: bool, debug_state: Dictionary, break_reason: String,
-	break_location: Dictionary = {},
+	is_playing: bool,
+	debug_state: Dictionary,
+	break_reason: String,
+	break_location: Dictionary = { },
 ) -> String:
 	if not is_playing:
 		return ""
@@ -417,10 +456,13 @@ static func _registry_timeout_hint(
 			return "The game is paused at a breakpoint; call debug_continue to resume."
 		var reason_clause := "" if break_reason.is_empty() else ": " + break_reason
 		var location_text := DebugSessionTracker.error_break_location_text(
-				break_reason, break_location)
+			break_reason,
+			break_location,
+		)
 		if location_text.is_empty():
 			location_text = "."
-		return ("The game is paused at a script error and cannot continue, so waiting "
-				+ "won't help%s%s Fix it, then game_stop and game_start.") % [
-					reason_clause, location_text]
+		return (
+			"The game is paused at a script error and cannot continue, so waiting "
+			+ "won't help%s%s Fix it, then game_stop and game_start."
+		) % [reason_clause, location_text]
 	return "Runtime port never appeared in registry within the timeout. The game may need more time to start. Try game_start with runtime_poll:true to re-probe, or check editor_get_console for startup errors."

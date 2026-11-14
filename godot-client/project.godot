@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 MCPRuntimeServer="*res://addons/godot_mcp_toolkit/runtime/mcp_runtime_server.gd"
 GameManager="*uid://6b3dhfsi0fqt"
+MCPRuntimeProbe="*res://addons/godot_mcp/runtime/mcp_runtime_probe.gd"
 
 [display]
 
@@ -31,7 +32,7 @@ project/assembly_name="DreamfusCliente"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_mcp_toolkit/plugin.cfg")
+enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg", "res://addons/gut/plugin.cfg")
 
 [gui]
 
@@ -40,10 +41,6 @@ common/auto_focus_strategy=1
 [input_devices]
 
 joypads/ignore_joypad_on_unfocused_application=true
-
-[mcp_toolkit]
-
-server/version="latest"
 
 [physics]
 

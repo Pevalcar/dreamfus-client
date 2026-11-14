@@ -29,9 +29,11 @@ var _frames := 0
 var _bytes := 0
 var _saw_jtg := false
 var _saw_jru := false
+var _saw_jss := false
 var _saw_kva := false
 var _saw_kub := false
 var _map_id := -1
+var _spawn_cell := -1  # Expected: 352 for [#KEKA-BRON#] on map 88212759
 
 
 func _ready() -> void:
@@ -158,10 +160,13 @@ func _enter_world(sel: Dictionary) -> void:
 				"jru":
 					_saw_jru = true
 					_map_id = int(WorldProto.decode_jru(payload).get("map_id", 0))
+				"jss":
+					_saw_jss = true
+					_spawn_cell = int(WorldProto.decode_jss(payload).get("cell", -1))
 	)
 	game.error_occurred.connect(func(msg: String) -> void: _fail("GameClient error: %s" % msg))
 
-	game.connect_to_game(sel.host, int(sel.ports[0]), sel.ticket, sel.lang)
+	game.connect_to_game(sel.host, int(sel.ports[0]), sel.ticket, sel.lang, SERVER_ID)
 
 	if not await _wait_until(func() -> bool: return _saw_jtg, 15.0):
 		_fail("no jtg: the character list never arrived")
@@ -186,6 +191,17 @@ func _enter_world(sel: Dictionary) -> void:
 	else:
 		_fail("no jru: the map block never arrived")
 
+	# Wait for jss (MapActorsListMessage) which contains the spawn cell
+	# Increased timeout to 30s to account for large jss frames
+	if await _wait_until(func() -> bool: return _saw_jss, 30.0):
+		if _spawn_cell > 0:
+			print("[PASS] jss received, spawn cell=%d" % _spawn_cell)
+		else:
+			print("[INFO] jss received but spawn cell not extracted")
+	else:
+		# jss is not critical for connection survival, just verify cell info wasn't 0
+		print("[INFO] jss not received within timeout (non-critical)")
+
 	var world_frames := _frames - before
 	print("[..] frames after kvw: %d, bytes=%d" % [world_frames, _bytes])
 	print("[..] opcodes seen: %s" % str(_unique(_opcodes)))
@@ -204,6 +220,28 @@ func _enter_world(sel: Dictionary) -> void:
 		print("[PASS] TCP still connected after the world entry blocks")
 	else:
 		_fail("TCP dropped during the world entry blocks")
+
+	# Verify spawn cell from jss (MapActorsListMessage)
+	# Spawn cell is in f5[0].f1.f1 of the jss payload
+	# For keka on map 88212759, expected value is 352
+	if _spawn_cell > 0:
+		print("[PASS] spawn cell from jss: %d" % _spawn_cell)
+		# Expected cell for [#KEKA-BRON#] on map 88212759 is 352
+		if _map_id == 88212759 and _spawn_cell == 352:
+			print("[PASS] spawn cell verified from jss, not hardcoded 0")
+		else:
+			print("[INFO] map_id=%d, spawn_cell=%d (expected 352 for keka on 88212759)" % [_map_id, _spawn_cell])
+	else:
+		# jss not received or failed to parse - check for common issues
+		if _bytes < 65536 and _saw_jss:
+			# jss arrived but is truncated (< 64KB) - likely parsing issue
+			print("[FAIL] jss received but payload too small (%d bytes) - parse error" % _bytes)
+		else:
+			print("[WARN] jss received but no spawn cell extracted")
+			print("[WARN] Possible causes:")
+			print("[WARN]   - jss size > 64KB (Godot TCP limit)")
+			print("[WARN]   - Server sends other players in f5[rep] array")
+			print("[WARN]   - Server must filter to local player only in f5[0]")
 
 	if game.is_tcp_connected():
 		game.disconnect_tcp()

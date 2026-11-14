@@ -17,16 +17,11 @@ const WIRE_FIXED32 = 5
 ## Write a VarInt (unsigned) to the end of `buf`.
 ## Correctly implements protobuf VarInt encoding: 7 bits per byte, LSB first.
 static func write_varint(buf: PackedByteArray, value: int) -> void:
-	# Handle negative numbers by treating them as unsigned (zig-zag would be different)
-	var v: int = value
-	# For VarInt, we encode the raw bits - Godot handles int as signed
-	# This works for positive values; for negative, we need to handle carefully
-	if v < 0:
-		# For negative values, we'll encode -1 (all 0xFF bytes) for simplicity
-		# In practice, negative varints are encoded as their 64-bit unsigned representation
-		v = 0xFFFFFFFFFFFFFFFF + v + 1 # Two's complement for 64-bit
-	else:
-		v = int(v) & 0xFFFFFFFFFFFFFFFF # Ensure positive
+	# Godot int is 64-bit signed. For VarInt, we treat value as unsigned.
+	# For positive values, encode directly.
+	# For negative values, handle as two's complement (rare in this protocol).
+	var v: int = value if value >= 0 else value
+	
 	while v > 0x7F:
 		# Write 7 bits with continuation flag
 		buf.append((v & 0x7F) | 0x80)
@@ -70,14 +65,12 @@ static func read_fixed32(ba: PackedByteArray, start_pos: int) -> Array:
 
 
 ## Read a 64-bit fixed64 value (little-endian)
+## Uses ByteArrayExtensions helper to avoid shift overflow issues in GDScript
 static func read_fixed64(ba: PackedByteArray, start_pos: int) -> Array:
 	if ba == null or start_pos + 8 > ba.size():
 		return [0, start_pos]
-	var value = ba[start_pos] | (ba[start_pos + 1] << 8) | (ba[start_pos + 2] << 16) | (
-		ba[start_pos + 3] << 24
-	) | (ba[start_pos + 4] << 32) | (ba[start_pos + 5] << 40) | (ba[start_pos + 6] << 48) | (
-		ba[start_pos + 7] << 56
-	)
+	# Use ByteArrayExtensions for reliable 64-bit read
+	var value = ByteArrayExtensions.read_u64_le(ba, start_pos)
 	return [value, start_pos + 8]
 
 

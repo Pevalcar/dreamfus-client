@@ -5,25 +5,33 @@ extends Node
 # Preload scripts for dynamic instantiation
 const GameClientScript = preload("res://src/Network/GameClient.gd")
 const SimpleProtocolClientScript = preload("res://src/Network/SimpleProtocolClient.gd")
+const MapManagerScript = preload("res://src/Core/MapManager.gd")
+const CharacterNodeScript = preload("res://src/Components/CharacterNode.gd")
 
 # Server configuration (exported for editor, stored in GameManager)
 @export var server_host: String = "127.0.0.1"
 @export var server_port: int = 5555
 
-# Componentes dinámicos
+# Componentes dinámicos 
 var ws_client: Node = null
 var game_client: GameClient = null
 
-# Referencias a UI instanciada 
+# Referencias a UI instanciada
 var launcher_ui: LauncherUI = null
 var character_select_ui: CharacterSelectUI = null
 var game_ui: GameUI = null
+
+# Juego activo (instanciados perezosamente al entrar en IN_GAME)
+var map_manager = null
+var character_node = null
 
 # Referencia al CharacterSelectUI instanciado (para llamadas directas)
 var character_select_ui_ref: CharacterSelectUI = null
 # Track signal connection state to prevent duplicates
 var _signals_connected: bool = false
 var _request_in_progress: bool = false
+# Track pending server selection ID for kqz ticket
+var _pending_server_selection_id: int = 0
 
 # Contenedores de UI
 @onready var launcher_container: Node = $LauncherContainer
@@ -188,6 +196,7 @@ func _on_tcp_server_selection_response(
 	host: String,
 	ports: Array,
 	error: String,
+	server_id: int = 0,
 ) -> void:
 	print(
 		"[Main] TCP Server selection response: ticket=%s..., host=%s, ports=%s"
@@ -199,9 +208,9 @@ func _on_tcp_server_selection_response(
 			GameManager.instance.error_received.emit("SERVER_SELECT_FAILED", error)
 		return
 
-	# Delegate to GameManager's handler
+	# Delegate to GameManager's handler with language and server_id
 	if GameManager.instance != null:
-		GameManager.instance.handle_server_selection(ticket, host, ports)
+		GameManager.instance.handle_server_selection(ticket, host, ports, "es", server_id)
 
 
 # Handle WebSocket auth response
@@ -220,6 +229,7 @@ func _on_ws_auth_response(success: bool, account_id: int, servers: Array, error:
 			# The server closes after ~100ms, so we must send this immediately
 			var first_server = servers[0]
 			var server_id = first_server.get("id", 0)
+			_pending_server_selection_id = server_id  # Store for kqz
 			# Use stored lang from _pending_auth_lang
 			var lang = (
 				GameManager.instance._pending_auth_lang
@@ -262,9 +272,9 @@ func _on_ws_server_selection_response(
 			GameManager.instance.error_received.emit("SERVER_SELECT_FAILED", err_msg)
 		return
 
-	# Delegate to GameManager's handler with language
+	# Delegate to GameManager's handler with language and server_id
 	if GameManager.instance != null:
-		GameManager.instance.handle_server_selection(ticket, host, ports, language)
+		GameManager.instance.handle_server_selection(ticket, host, ports, language, _pending_server_selection_id)
 
 
 # Handle WebSocket connection state change
@@ -348,3 +358,36 @@ func _show_game() -> void:
 	character_select_container.visible = false
 	game_container.visible = true
 	GameManager.instance.change_state(GameManager.GameState.IN_GAME)
+
+	# Lazily create map + character nodes (only once per session).
+	if map_manager == null:
+		map_manager = MapManagerScript.new()
+		map_manager.name = "MapManager"
+		game_container.add_child(map_manager)
+		print("[Main] MapManager añadido al juego")
+
+	if character_node == null:
+		character_node = CharacterNodeScript.new()
+		character_node.name = "Character"
+		game_container.add_child(character_node)
+		character_node.set_map_manager(map_manager)
+		# Use breed from current character if available
+		if GameManager.instance.current_character != null:
+			character_node.breed_id = GameManager.instance.current_character.breed
+		print("[Main] CharacterNode añadido al juego")
+
+	# Connect jru signal — fires when server sends the initial map block.
+	var gm = GameManager.instance
+	if not gm.map_loaded.is_connected(_on_map_loaded):
+		gm.map_loaded.connect(_on_map_loaded)
+
+
+func _on_map_loaded(map_id: int, cell_id: int) -> void:
+	print("[Main] map_loaded signal: map_id=%d cell_id=%d" % [map_id, cell_id])
+	if map_manager == null:
+		return
+	# Centre the camera on the starting cell.
+	map_manager.load_map_by_id(map_id)
+	if character_node != null:
+		character_node.place_at(cell_id)
+		print("[Main] Personaje situado en celda %d del mapa %d" % [cell_id, map_id])

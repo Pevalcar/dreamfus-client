@@ -38,6 +38,8 @@ var game_manager: Node = null
 var pending_ticket: String = ""
 ## Language to include in kqz message (from server_selection_response)
 var pending_language: String = ""
+## Server ID to include in kqz message (from WebSocket server selection)
+var pending_server_id: int = 0
 ## Track the expected ticket for verification (useful for debugging)
 var _expected_ticket: String = ""
 ## Protocol methods using Proto.gd
@@ -48,7 +50,6 @@ var _bytes_received: int = 0 # Counter for debugging
 
 ## Current authentication stage for server selection flow
 var _current_auth_stage: String = "initial_auth" # initial_auth, connecting_to_game, waiting_for_ticket, waiting_for_server_list, authenticated
-
 
 ## Auth parameters stored for sending on connection (for fallback auth flow)
 var _auth_lang: String = "" # Must be explicitly set via start_connection_for_auth()
@@ -96,20 +97,35 @@ func _process(_delta: float) -> void:
 				_send_kqz_immediate()
 				connected.emit()
 
-			# Read whatever is pending. This used to stop after the welcome burst
-			# (jtg) on the belief that nothing else could arrive, but that is exactly
-			# where the world entry starts: kvw is answered with ~330 frames.
-			var available: int = tcp.get_available_bytes()
-			if available > 0:
-				_bytes_received = available
-				var result: Array = tcp.get_data(available)
+			# Read available data on every frame when connected
+			# CRITICAL: Continue reading in chunks up to 64KB each call due to Godot TCP limitation.
+			# The jss frame can be ~100KB, so we need multiple reads to accumulate it.
+			# IMPORTANT: Godot's get_available_bytes() has an internal limit of 64KB max,
+			# even if more data is in the OS socket buffer. We need to read what's available
+			# and continue reading in subsequent frames until we have the complete frame.
+			# Strategy: always read available data, then let the buffer accumulate until
+			# we have a complete frame.
+			var bytes_to_read = tcp.get_available_bytes()
+
+			if bytes_to_read > 0:
+				# Cap at 64KB per read due to Godot TCP limitation
+				if (bytes_to_read > 64 * 1024):
+					bytes_to_read = 64 * 1024
+
+				var result: Array = tcp.get_data(bytes_to_read)
 				var err: Error = result[0]
 				var data: PackedByteArray = result[1]
-				if err == OK:
-					if data.size() > 0:
-						buffer.append_array(data)
-						_drain_buffer()
-				else:
+
+				if err == OK and data.size() > 0:
+					_bytes_received += data.size()
+					print(
+						"[GameClient] Received %d bytes, total buffer: %d bytes"
+						% [data.size(), buffer.size() + data.size()]
+					)
+					buffer.append_array(data)
+					# Process accumulated data
+					_drain_buffer()
+				elif err != OK:
 					print("[GameClient] get_data error: %d" % err)
 
 		StreamPeerTCP.STATUS_CONNECTING:
@@ -127,6 +143,7 @@ func connect_to_game(
 	port: int,
 	ticket: String = "",
 	language: String = "es",
+	server_id: int = 0,
 ) -> Error:
 	"""Connect to TCP game server.
 	
@@ -135,6 +152,7 @@ func connect_to_game(
 		port: Server port
 		ticket: Optional ticket to send after connection (kqz authentication)
 		language: Language code for kqz message (default: "es")
+		server_id: Server ID to include in kqz message (required for ticket validation)
 	"""
 	if _connected:
 		disconnect_tcp()
@@ -158,9 +176,10 @@ func connect_to_game(
 		pending_ticket = ticket
 		_expected_ticket = ticket
 		pending_language = language.strip_edges().to_lower()
+		pending_server_id = server_id
 		print(
-			"[GameClient] Ticket establecido directamente: %s... (full: %s), lang=%s"
-			% [ticket.substr(0, 8), ticket, pending_language]
+			"[GameClient] Ticket establecido directamente: %s... (full: %s), lang=%s, server=%d"
+			% [ticket.substr(0, 8), ticket, pending_language, server_id]
 		)
 
 	tcp = StreamPeerTCP.new()
@@ -233,7 +252,12 @@ func send_push(opcode: String, payload: PackedByteArray = PackedByteArray()) -> 
 ##   }
 ## The outer message uses field 2 for the inner message (not field 1 like requests)
 ## Based on: Pb.New().Msg(2, any_msg).Build()
-func send_ticket(ticket: String, language: String = "es") -> void:
+##
+## kqz protobuf schema: message kqz { int32 fytj = 1; string fytk = 2; string fytl = 3; }
+## - fytj (f1): server ID (int32) - REQUIRED
+## - fytk (f2): ticket (string)
+## - fytl (f3): language (string)
+func send_ticket(ticket: String, language: String = "es", server_id: int = 0) -> void:
 	if tcp == null or not _connected:
 		printerr("[GameClient] No conectado, no se puede enviar kqz")
 		return
@@ -241,8 +265,11 @@ func send_ticket(ticket: String, language: String = "es") -> void:
 	# Normalize ticket: trim whitespace and ensure lowercase
 	var normalized_ticket: String = ticket.strip_edges().to_lower()
 
-	# Build the inner kqz message: { f2: ticket, f3: language }
+	# Build the inner kqz message: { f1: serverId, f2: ticket, f3: language }
+	# Field 1 (fytj) is REQUIRED - it's the server ID that links the ticket to a specific server
 	var kqz_inner: PackedByteArray = PackedByteArray()
+	if server_id > 0:
+		Proto.put_varint(kqz_inner, 1, server_id) # f1 = serverId (REQUIRED, int32)
 	Proto.put_string(kqz_inner, 2, normalized_ticket) # f2 = ticket
 	if language != "":
 		Proto.put_string(kqz_inner, 3, language) # f3 = language (optional but per protocol)
@@ -264,8 +291,8 @@ func send_ticket(ticket: String, language: String = "es") -> void:
 	framed.append_array(packet)
 
 	print(
-		"[GameClient] Enviando kqz (ticket=%s..., lang=%s, %d bytes)"
-		% [normalized_ticket.substr(0, 8), language, framed.size()]
+		"[GameClient] Enviando kqz (ticket=%s..., lang=%s, server=%d, %d bytes)"
+		% [normalized_ticket.substr(0, 8), language, server_id, framed.size()]
 	)
 	print("[GameClient] kqz hex: %s" % framed.hex_encode())
 
@@ -418,9 +445,10 @@ func _send_kqz_if_ready() -> void:
 	# This runs in the next frame via call_deferred, ensuring pending_ticket is set
 	if pending_ticket != "":
 		print("[GameClient] Enviando ticket kqz...")
-		send_ticket(pending_ticket, pending_language)
+		send_ticket(pending_ticket, pending_language, pending_server_id)
 		pending_ticket = ""
 		pending_language = "" # Don't reset - wait for new server_selection_response
+		pending_server_id = 0 # Reset server ID after sending
 		_current_auth_stage = "waiting_for_ticket"
 	else:
 		# No ticket to send - might be auth flow
@@ -451,33 +479,51 @@ func _drain_buffer() -> void:
 			return
 
 		if buffer.size() < end + size:
-			print(
-				"[GameClient] Buffer insuficiente: need %d, have %d" % [end + size, buffer.size()]
-			)
-			return # esperar más datos
+			# Godot 4.8 TCP limitation: get_available_bytes() is capped at 64KB max
+			# even if more data is in the OS socket buffer. We need to read what's available
+			# and continue reading in subsequent frames until we have the complete frame.
+			# Strategy: accumulate fragments until complete frame, with a timeout/safety limit.
+			var buffer_deficit: int = (end + size) - buffer.size()
+			if size > 64 * 1024:
+				# Frame exceeds single-read limit - need to accumulate fragments
+				# But if buffer has been growing for too long (> 1 MB), something is wrong
+				if buffer.size() > 1024 * 1024:
+					printerr(
+						"[GameClient] CRITICAL: Buffer overflow - frame size %d bytes but only %d bytes could be read after multiple reads. "
+						+ "Server may need to fragment large messages. Dropping connection."
+						% [size, buffer.size()]
+					)
+					error_occurred.emit("Frame overflow: expected %d, got %d" % [size, buffer.size()])
+					buffer.clear()
+					return
+				# Not enough data yet - wait for more in the next frame
+				print(
+					"[GameClient] Esperando fragmentos: need %d bytes total, have %d (buffer deficit: %d bytes). "
+					+ "Frame size: %d bytes (exceeds 64KB single-read limit)."
+					% [end + size, buffer.size(), buffer_deficit, size]
+				)
+			else:
+				# Small frame but incomplete - likely just slow network
+				print(
+					"[GameClient] Buffer insuficiente: need %d, have %d. Esperando más datos..."
+					% [end + size, buffer.size()]
+				)
+			return # esperar más datos en el siguiente frame
 
 		var frame: PackedByteArray = ByteArrayExtensions.byte_subarray(buffer, end, size)
 		buffer = ByteArrayExtensions.byte_subarray_from(buffer, end + size)
 		frames_parsed += 1
 
-		# Aumentar límite para permitir batch completo del welcome burst (hasta 20 frames)
-		if frames_parsed > 20:
-			print("[GameClient] Demasiados frames, deteniendo para evitar bucle infinito")
+		# Limitar frames para evitar bucle infinito
+		if frames_parsed > 128:
 			break
 
 		var msg: Dictionary = Proto.decode(frame)
 		if not msg.is_empty():
-			print(
-				"[GameClient] -> Emitiendo mensaje: opcode=%s, payload=%d bytes"
-				% [msg.get("opcode", ""), msg.get("payload", PackedByteArray()).size()]
-			)
 			message_received.emit(msg["opcode"], msg["payload"], msg["id"])
 
 	if frames_parsed > 0:
-		print(
-			"[GameClient] Frames parseados: %d, buffer restante: %d bytes"
-			% [frames_parsed, buffer.size()]
-		)
+		pass # Frame count logged for debugging
 
 
 ## Handle server selection response from connection server

@@ -192,3 +192,33 @@ f1 { f2: slot, f6 { f2: spell_id } } for spells, f9: items; f2: bar_type (1=spel
 - **kvw_allowed flag**: Se establece en `true` al recibir jtg, se pone en `false` después de enviar kvw. No se vuelve a habilitar.
 - **No se requieren confirmaciones lqc/kqo**: El flujo simplificado asume que el servidor envía los 3 bloques secuencialmente.
 - **kvw no es replayado**: El servidor construye kub desde la base de datos, no desde capture.
+
+## Problemas Conocidos y Soluciones Requeridas
+
+### Problem jss 64KB TCP Limit (CRÍTICO)
+
+**Problema**: El jss (MapActorsListMessage) es de ~102KB, excediendo el límite de 64KB de Godot 4.8 en `StreamPeerTCP.get_available_bytes()`.
+
+**Efecto**: El buffer se queda trucado, el jss nunca se procesa y el spawn cell no se extrae.
+
+**Error visible**:
+```
+[GameClient] Buffer insuficiente: need 101962, have 65536
+```
+
+**Causa raíz**: El servidor incluye TODOS los jugadores en el mapa en el array `f5[rep]`, y cada jugador añade ~500-1000 bytes.
+
+**Solución requerida en el servidor**:
+- En `ConnectionProtocol.cs` / `BuildMapActors()`:
+  - Filtrar para **solo incluir el jugador local** en `f5[0]`
+  - NO incluir otros jugadores que estén en el mismo mapa
+
+**Archivos relevantes**:
+- `docs/TCP_64KB_LIMITATION.md` - Análisis completo del problema
+- `godot-client/src/Network/GameClient.gd` - Límite detectado en `_drain_buffer()`
+- `godot-client/src/Network/WorldProto.gd` - Decodificador jss actualizado
+- `godot-client/test/test_world_entry_e2e.gd` - Test con verificación del spawn cell (352)
+
+**Verificación esperada**:
+- Spawn cell para keka en mapa 88212759: **352** (verificado en world.db)
+- Si el servidor reduce el jss a < 64KB, el test pasará completamente

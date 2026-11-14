@@ -11,14 +11,38 @@ Listado de opcodes del protocolo 3.6.10.10 (SimpleProtocol), con estado y descri
 | Opcode | Dirección | Descripción | Estado |
 |--------|-----------|-------------|--------|
 | `kqz` | C→S | Presentar ticket al servidor | ✅ |
+| `jtu` | S→C | Confirmación de ticket aceptado | ✅ |
 | `krt` | C→S | Confirmar presentación (vacío) | ✅ |
+| `kqr` | S→C | Confirmación selección personaje (cierra conexión) | ✅ |
 | `kvz` | C→S | Crear personaje | ✅ |
 | `kvc` | C→S | Ver personajes (sin parámetros) | ✅ |
 | `kvw` | C→S | Seleccionar personaje | ✅ |
 | `kvl` | C→S | Seleccionar con ID alternativo | ✅ |
-| `kvd` | S→C | Fin de lista de personajes | ✅ |
+| `kvd` | S→C | "Do not stop here" (solo en reconexiones a combate/koliseo) | ✅ |
+| `jtg` | S→C | Catálogo de regalos - final de ráfaga de bienvenida | ✅ |
 
-### 1.2 Mapa y movimiento
+### 1.2 Ráfaga de bienvenida (Server → Client)
+
+| Opcode | Dirección | Descripción | Estado |
+|--------|-----------|-------------|--------|
+| `kra` | S→C | Abrir ráfaga de bienvenida (AuthenticationTicketAcceptedMessage) | ✅ |
+| `lqu` | S→C | Sincronización de reloj (BasicTimeMessage) | ✅ |
+| `hoy` | S→C | Datos de habilidad del servidor | ✅ |
+| `kqu` | S→C | Funcionalidades activas del servidor | ✅ |
+| `mgq` | S→C | Capacidades de cuenta | ✅ |
+| `mgt` | S→C | Capacidades de cuenta (continuación) | ✅ |
+| `hpd` | S→C | Datos de cuenta | ✅ |
+| `krs` | S→C | Estado de suscripción | ✅ |
+| `mgz` | S→C | Versión del catálogo de contenido | ✅ |
+| `kqp`×3 | S→C | Mensajes sin significado establecido (placeholder) | ✅ |
+| `kvi` | S→C | Lista de personajes (en burst normal; falta en reconexión) | ✅ |
+| `jtg` | S→C | Catálogo de regalos - final de ráfaga de bienvenida | ✅ |
+| `kva` | S→C | Identidad del personaje seleccionado | ✅ |
+| `kub` | S→C | Hoja de características | ✅ |
+| `lqg` | S→C | SequenceNumberEvent - respuesta al lqc | ✅ |
+| `lqc` | C→S | SequenceNumberRequest - solicitar bloque de mapa tras recepción kub | ✅ |
+
+### 1.3 Mapa y movimiento
 
 | Opcode | Dirección | Descripción | Estado |
 |--------|-----------|-------------|--------|
@@ -26,6 +50,7 @@ Listado de opcodes del protocolo 3.6.10.10 (SimpleProtocol), con estado y descri
 | `jrh` | S→C | Notificar llegada a mapa | ✅ (push) |
 | `hjk` | S→C | Mapa con celdas ocupadas | ✅ (push) |
 | `jss` | S→C | Lista de actores en el mapa | ✅ (push) |
+| `kmv` | S→C | Posición exacta del jugador (cell + facing) | ✅ (push) |
 | `lva` | S→C | Fin de lista de actores | ✅ (push) |
 | `jrw` | C→S | Mover a celda (packed) | ✅ |
 | `jsj` | S→C | Posición del jugador | ✅ (push) |
@@ -34,12 +59,17 @@ Listado de opcodes del protocolo 3.6.10.10 (SimpleProtocol), con estado y descri
 | `jqk` | C→S | Cambiar de mapa confirmado | ✅ |
 | `jsd` | S→C | Cargar datos del mapa vecino | ✅ (push) |
 
-### 1.3 Personajes e inventario
+### 1.4 Personajes e inventario
 
 | Opcode | Dirección | Descripción | Estado |
 |--------|-----------|-------------|--------|
-| `kvi` | S→C | Lista de personajes | ✅ |
+| `kvz` | C→S | Crear personaje | ✅ |
+| `kvc` | C→S | Ver personajes (sin parámetros) | ✅ |
+| `kvw` | C→S | Seleccionar personaje | ✅ |
+| `kvl` | C→S | Seleccionar con ID alternativo | ✅ |
 | `kva` | S→C | Identidad del personaje seleccionado | ✅ |
+| `kvi` | S→C | Lista de personajes (en burst normal; falta en reconexión) | ✅ |
+| `kvb` | S→C | Rechazo creación personaje (f2: razón) | ✅ |
 | `kub` | S→C | Hoja de características | ✅ |
 | `hms` | S→C | Hechizos del personaje | ✅ |
 | `ivx` | S→C | Inventario completo | ✅ |
@@ -47,11 +77,11 @@ Listado de opcodes del protocolo 3.6.10.10 (SimpleProtocol), con estado y descri
 | `ivq` | S→C | Item movido con éxito | ✅ |
 | `iun` | S→C | Pod actualizado | ✅ |
 
-### 1.4 Sistema de combate
+### 1.5 Sistema de combate
 
 | Opcode | Dirección | Descripción | Estado |
 |--------|-----------|-------------|--------|
-| `hqa` | C→S | Iniciar pelea con NPC/monstruo | ⚠️ (partially) |
+| `hqa` | C→S | Iniciar pelea con NPC/monstruo | ⚠️ (party only) |
 | `jxg` | S→C | Datos del fighter | ⚠️ (no wired) |
 | `kba` | S→C | Barra de hechizos | ⚠️ (no wired) |
 | `jzu` | S→C | Estado de turno | ⚠️ (no wired) |
@@ -62,7 +92,7 @@ Listado de opcodes del protocolo 3.6.10.10 (SimpleProtocol), con estado y descri
 | `jya` | C→S | Fin de turno | ⚠️ (no wired) |
 | `jyj` | S→C | Fin de pelea | ⚠️ (no wired) |
 
-### 1.5 Interactivos
+### 1.6 Interactivos
 
 | Opcode | Dirección | Descripción | Estado |
 |--------|-----------|-------------|--------|
@@ -71,15 +101,17 @@ Listado de opcodes del protocolo 3.6.10.10 (SimpleProtocol), con estado y descri
 | `hjj` | S→C | Entrada de zaap (resultado) | ✅ (basic) |
 | `iwb` | S→C | Resultado interactivo | ✅ (basic) |
 
-### 1.6 Eventos y mensajes
+### 1.7 Eventos y mensajes
 
 | Opcode | Dirección | Descripción | Estado |
 |--------|-----------|-------------|--------|
 | `kqo` | C→S | Heartbeat cada 5s | ✅ |
 | `kqy` | S→C | Respuesta de heartbeat | ✅ |
-| `lqc` | C→S | Confirmar recepción catálogo | ✅ |
+| `lqc` | C→S | SequenceNumberRequest - solicitar bloque de mapa tras recepción kub | ✅ |
+| `kqq` | C→S | Volver a selección (logout) | ✅ |
+| `kqr` | S→C | Confirmación volver (`{f1: guid}`) | ✅ |
 
-### 1.7 Drops y recompensas
+### 1.8 Drops y recompensas
 
 | Opcode | Dirección | Descripción | Estado |
 |--------|-----------|-------------|--------|
@@ -97,9 +129,7 @@ Estos opcodes aparecen en el código pero NO se usan en 3.6.10.10:
 |--------|-----------|-------------|-------|
 | `lys` | - | - | No existe en 3.6.10.10 |
 | `kqt` | - | - | Antiguo formato de ticket |
-| `kqu` | - | - | Obsoleto |
 | `lxy` | - | - | Sistema antiguo de inventario |
-| `kqq` | - | - | Sistema antiguo de sesiones |
 
 ---
 
@@ -190,3 +220,9 @@ El archivo `datos/dofus3_mappings.json` **NO es confiable** para el cliente Godo
 | Chat | 6 | 0 | 🟢 (bajo) |
 
 **Prioridad actual:** Solo se necesita el flujo de login + world movement para que el cliente funcione. Combate es el bloque principal.
+
+**Nota:** La ráfaga de bienvenida completa es:
+```
+kqz + krt → kra → lqu → hoy → kqu → mgq → mgt → hpd → krs → mgz → kqp×3 → [kvi] → jtg → kvw → kva → kub → lqg → lqc → jru
+```
+Donde `[kvi]` solo aparece en reconexiones a combate/koliseo. El `kvd` ("do not stop here") **no se envía en login normal**, solo en reconexiones a combate/koliseo.

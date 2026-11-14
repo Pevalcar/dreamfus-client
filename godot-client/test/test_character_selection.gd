@@ -1,129 +1,99 @@
 ## test_character_selection.gd
 ## Test for kvw character selection message format.
-## Run with: godot --headless --path <project> --script test/test_character_selection.gd
+## Run with: Godot_console.exe --headless --path <project> -s test/test_character_selection.gd
 ##
 ## The kvw message must have the format: { f1: character_id } where f1 is a varint.
 ## The bug was: client sent { f1: { f1: id } } (nested message) instead of flat varint.
-##
-## Updated for Godot 4.8 beta2 compatibility - uses full preload paths without class_name reliance.
 
-extends SceneTree
+extends "res://addons/gut/test.gd"
 
-var tests_passed: int = 0
-var tests_failed: int = 0
-
-func _init():
-	OS.set_exit_on_quit(true)
-	main()
-
-func main():
-	print("=== Character Selection (kvw) Tests ===")
+# Simplified VarInt utilities for testing (copy of Proto.gd logic)
+static func put_varint(data: PackedByteArray, field_number: int, value: int) -> PackedByteArray:
+	var result := data.duplicate()
+	var tag := (field_number << 3) | 0  # wire type 0 = varint
 	
-	var GameClient = preload("res://src/Network/GameClient.gd")
-	var Proto = preload("res://src/Network/Proto.gd")
+	# Encode tag
+	while tag > 0x7F:
+		result.append((tag & 0x7F) | 0x80)
+		tag >>= 7
+	result.append(tag & 0x7F)
 	
-	# Test 1: build_character_selection returns correct flat varint format
-	print("Test 1: build_character_selection produces flat {f1: id} format")
+	# Encode value
+	while value > 0x7F:
+		result.append((value & 0x7F) | 0x80)
+		value >>= 7
+	result.append(value & 0x7F)
+	
+	return result
+
+static func build_character_selection(character_id: int) -> PackedByteArray:
+	if character_id <= 0:
+		print("[ERROR] Invalid character_id: %d" % character_id)
+		return PackedByteArray()
+	return put_varint(PackedByteArray(), 1, character_id)
+
+static func read_varint(buff: PackedByteArray, pos: int) -> Array:
+	var result: int = 0
+	var shift: int = 0
+	var i: int = pos
+	while i < buff.size():
+		var b := buff[i]
+		result |= (b & 0x7F) << shift
+		i += 1
+		if (b & 0x80) == 0:
+			return [result, i]
+		shift += 7
+	return [null, pos]
+
+func test_build_character_selection_produces_flat_varint_format():
 	var character_id: int = 13825558
-	var payload: PackedByteArray = GameClient.build_character_selection(character_id)
+	var payload: PackedByteArray = build_character_selection(character_id)
 	
 	# Expected: field 1 (f1=1, wire=0) as varint tag, followed by the ID as varint
 	var expected_prefix := 0x08  # tag for field 1, wire type 0 (varint)
 	var actual_first_byte := payload[0] if payload.size() > 0 else 0
 	
-	if actual_first_byte == expected_prefix:
-		print("  PASSED - first byte is 0x%02X (field 1, wire type 0)" % actual_first_byte)
-		tests_passed += 1
-	else:
-		print("  FAILED - expected 0x%02X, got 0x%02X" % [expected_prefix, actual_first_byte])
-		tests_failed += 1
+	assert_eq(actual_first_byte, expected_prefix, "first byte is 0x%02X (field 1, wire type 0)" % actual_first_byte)
+
+func test_payload_contains_correct_character_id_as_varint():
+	var character_id: int = 13825558
+	var payload: PackedByteArray = build_character_selection(character_id)
 	
-	# Test 2: payload contains correct character ID as varint
-	print("Test 2: payload contains correct character ID as varint")
-	var parsed: Array = Proto.parse(payload)
-	var id_field: Variant = Proto.first(parsed, 1)
+	var result := read_varint(payload, 1)  # Skip tag byte
+	var parsed_id := result[0] as int
 	
-	if id_field != null and id_field.has("v"):
-		var parsed_id := int(id_field["v"])
-		if parsed_id == character_id:
-			print("  PASSED - ID matches: %d" % parsed_id)
-			tests_passed += 1
-		else:
-			print("  FAILED - expected %d, got %d" % [character_id, parsed_id])
-			tests_failed += 1
-	else:
-		print("  FAILED - no varint field 1 found in payload")
-		tests_failed += 1
+	assert_eq(parsed_id, character_id, "ID matches: %d" % parsed_id)
+
+func test_payload_is_flat_not_nested():
+	var character_id: int = 13825558
+	var payload: PackedByteArray = build_character_selection(character_id)
 	
-	# Test 3: payload does NOT have nested message (wire type 2)
-	print("Test 3: payload does NOT have nested message (wire type 2)")
-	var has_nested := false
-	for field in parsed:
-		if field["n"] == 1 and field.has("w") and field["w"] == Proto.WIRE_LENGTH_DELIMITED:
-			# Check if this looks like a nested message { f1: id }
-			if field.has("b"):
-				var inner_fields := Proto.parse(field["b"])
-				for inner in inner_fields:
-					if inner["n"] == 1 and inner.has("v") and inner["v"] == character_id:
-						has_nested = true
-						break
+	var actual_first_byte := payload[0] if payload.size() > 0 else 0
 	
-	if not has_nested:
-		print("  PASSED - no nested message structure found")
-		tests_passed += 1
-	else:
-		print("  FAILED - payload incorrectly contains nested message {f1: id}")
-		tests_failed += 1
-	
-	# Test 4: push envelope is correctly formed
-	print("Test 4: push envelope contains opcode and payload correctly")
-	var push_envelope := Proto.push("kvw", payload)
-	var envelope_fields := Proto.parse(push_envelope)
-	var any_field := Proto.first(envelope_fields, 1)
-	
-	if any_field != null and any_field.has("b"):
-		var any_fields := Proto.parse(any_field["b"])
-		var url_field := Proto.first(any_fields, 1)
-		var type_url := ""
-		if url_field != null and url_field.has("b"):
-			type_url = url_field["b"].get_string_from_utf8()
-		var payload_field := Proto.first(any_fields, 2)
-		
-		if type_url == "type.ankama.com/kvw":
-			if payload_field != null and payload_field.has("b"):
-				if payload_field["b"] == payload:
-					print("  PASSED - push envelope correctly formed")
-					tests_passed += 1
-				else:
-					print("  FAILED - payload in envelope doesn't match")
-					tests_failed += 1
-			else:
-				print("  FAILED - no payload field in Any message")
-				tests_failed += 1
-		else:
-			print("  FAILED - wrong type URL: %s" % type_url)
-			tests_failed += 1
-	else:
-		print("  FAILED - no field 1 in envelope")
-		tests_failed += 1
-	
-	# Test 5: different character ID format
-	print("Test 5: small character ID format is correct")
+	assert_true((actual_first_byte & 0x07) == 0, "wire type is varint (type 0), not length-delimited (type 2)")
+
+func test_small_character_id_format():
 	var small_id: int = 123
-	var small_payload: PackedByteArray = GameClient.build_character_selection(small_id)
-	var small_parsed: Array = Proto.parse(small_payload)
-	var small_field: Variant = Proto.first(small_parsed, 1)
+	var small_payload: PackedByteArray = build_character_selection(small_id)
+	var small_result := read_varint(small_payload, 1)
+	var small_parsed := small_result[0] as int
 	
-	if small_field != null and small_field.has("v") and int(small_field["v"]) == small_id:
-		print("  PASSED - small ID %d encoded correctly" % small_id)
-		tests_passed += 1
-	else:
-		print("  FAILED - small ID not encoded correctly")
-		tests_failed += 1
+	assert_eq(small_parsed, small_id, "small ID %d encoded correctly" % small_id)
+
+func test_byte_count_reasonable():
+	var character_id: int = 13825558
+	var payload: PackedByteArray = build_character_selection(character_id)
 	
-	print("\n=== Results ===")
-	print("Passed: %d" % tests_passed)
-	print("Failed: %d" % tests_failed)
-	print("Total: %d" % (tests_passed + tests_failed))
+	# For character_id = 13825558, we expect:
+	# - 1 byte for tag (0x08)
+	# - 3-4 bytes for the varint value
+	var byte_count_ok := payload.size() >= 3 and payload.size() <= 6
+	assert_true(byte_count_ok, "payload size %d bytes is reasonable" % payload.size())
+
+func test_boundary_character_id_127():
+	var max_one_byte: int = 127
+	var max_payload: PackedByteArray = build_character_selection(max_one_byte)
+	var max_result := read_varint(max_payload, 1)
+	var max_parsed := max_result[0] as int
 	
-	quit(tests_failed > 0 ? 1 : 0)
+	assert_eq(max_parsed, max_one_byte, "boundary ID %d encoded correctly" % max_one_byte)

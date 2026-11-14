@@ -10,28 +10,54 @@ El mundo de juego es un conjunto de mapas (posiciones X/Y) conectados por bordes
 
 Después de presentar el ticket (`kqz`), el servidor envía una ráfaga de mensajes:
 
+**Login normal (sin personaje en lucha):**
 ```
-kqc                     →  confirmación de bloqueo 1
-krv                     →  confirmación de bloqueo 2  
-kvi                     →  lista de personajes (si no se ha visto)
-kvd                     →  fin de lista
-kvw                     →  datos del personaje seleccionado
-lqc                     →  catálogos 1 (equipamiento, hechizos, etc.)
-jru                     →  MAPA INICIAL (191105026 - Astrub zaap)
+kqz + krt → kra → lqu → hoy → kqu → mgq → mgt → hpd → krs → mgz → kqp → kqp → kqp → kvi → jtg
 ```
 
-**Regla:** Si el cliente manda `jru` antes de recibir el primero, el servidor lo tira. Ver `jsj` (mapa completo) y `lva` (actores) debajo.
+**Reconexión a combate/koliseo (personaje en lucha):**
+```
+kqz + krt → kra → lqu → hoy → kqu → mgq → mgt → hpd → krs → mgz
+  → kvc → krv (cliente) → kvi → kvd → CharacterForceSelectionEvent (kwb)
+```
+
+**Post-selección (cliente → servidor):**
+```
+kvw {f1: id_personaje} → kva {f1: detalles} → kub → lqc → jru
+```
+
+**Notas verificadas:**
+- El cliente **siempre envía `kvc`/`krv`** tras el burst: en login normal el servidor no responde (la lista ya viajó); en reconexión sí (`kvi` + `kvd`).
+- `jtg` = **catálogo de regalos** (vacío). "Do not stop here" es `kvd`.
+- `kvd` ("do not stop here") **solo se usa en reconexiones a combate directo**: detiene el burst en lugar de enviar `kvi` → jtg.
+- El cliente contesta `kvd` con `kwb` (CharacterForceSelectionEvent), no con `kvw`.
+
+**Mensajes clave:**
+- `kqz`: presentar ticket al servidor
+- `krt`: confirmación de presentación
+- `kra`: abre la ráfaga (AuthenticationTicketAcceptedMessage)
+- `lqu`: sincronización de reloj (BasicTimeMessage)
+- `hoy`: datos de habilidad del servidor
+- `kqu`: funcionalidades activas del servidor
+- `mgq`, `mgt`, `hpd`: capacidades de cuenta
+- `krs`: estado de suscripción
+- `mgz`: versión del catálogo de contenido
+- `kqp`×3: mensajes sin significado establecido
+- `kvi`: lista de personajes (en burst normal; falta en reconexión)
+- `jtg`: catálogo de regalos - finaliza burst normal
+- `kvd`: "do not stop here" - solo en reconexión combate/koliseo
+- `kvw` → `kva`: solicitud y confirmación de selección del personaje
+- `kub`: hoja de características (llega en el estado inicial)
+- `lqc`: confirmación del cliente (se envía al servidor, no es un mensaje del servidor)
+- `jru`: mapa inicial del jugador
 
 ### 1.2 Bloque 1: Mapa, hoja, misiones
 
-```
-kvw {f1: id_personaje}    →  datos del personaje
-lqc                     →  catálogos (loot tables, efectos, skills)
-```
+Después de la selección del personaje, el cliente recibe el estado inicial que incluye:
+- `kub`: hoja de características
+- `lqc`: respuesta al cliente con catálogos (equipamiento, hechizos, monturas)
 
-### 1.3 Bloque 2: Catálogos
-
-`lqc` es la confirmación. Los datos reales vienen en varios mensajes push (equipamiento, hechizos, monturas, etc.).
+Luego el servidor manda el mapa inicial que termina en `jru`.
 
 ### 1.4 Bloque 3: Mensaje del mapa
 

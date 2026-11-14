@@ -7,6 +7,8 @@ signal auth_completed(account_id: int, servers_json: String)
 signal error_received(error_code: String, error_message: String)
 signal character_selected(character_id: int, character_name: String)
 signal characters_received(characters: Array)
+## Emitted when jru map block arrives; carries map_id and starting cell_id
+signal map_loaded(map_id: int, cell_id: int)
 
 ## Game state enum
 enum GameState {
@@ -38,6 +40,10 @@ var spell_bar: Dictionary = { "bar_type": 0, "shortcuts": [] }
 var player_id: int = 0
 var player_name: String = ""
 
+## Current map position (set by jru handler)
+var current_map_id: int = 0
+var current_cell_id: int = 0
+
 ## Connection state
 var is_connected: bool = false
 var is_character_loaded: bool = false
@@ -50,7 +56,7 @@ var server_port: int = 5555
 var ws_client: Node = null
 var game_client: GameClient = null
 
-## Current game state
+## Current game state 
 var state: GameState = GameState.LAUNCHER
 
 ## Selected character (alias for current_character for GameUI compatibility)
@@ -64,12 +70,14 @@ var servers: Array = []
 
 ## Selected server info
 var selected_server_id: int = 0
+## Pending map id waiting for jss to resolve cell position
+var _pending_map_id: int = 0
 
 ## Auth parameters stored for TCP connection (used before connection)
 # Note: These are now stored in GameClient._auth_token, _auth_lang, etc.
 # Keeping for backward compatibility but deprecated
 var _pending_auth_token: String = ""
-var _pending_auth_lang: String = ""  # Must be set before use - prevents stale values
+var _pending_auth_lang: String = "" # Must be set before use - prevents stale values
 var _pending_auth_install_id: String = ""
 
 ## TCP connection attempt in progress
@@ -174,24 +182,25 @@ func handle_server_selection(
 	host: String,
 	ports: Array,
 	language: String = "es",
+	server_id: int = 0,
 ) -> void:
 	print(
-		"[GameManager] Server selection, ticket=%s..., host=%s, ports=%s, lang=%s"
-		% [ticket.substr(0, 8), host, str(ports), language]
+		"[GameManager] Server selection, ticket=%s..., host=%s, ports=%s, lang=%s, server=%d"
+		% [ticket.substr(0, 8), host, str(ports), language, server_id]
 	)
 	if ports.size() > 0:
 		var port = ports[0]
 		# Connect to TCP game server
 		if game_client != null:
-			# Pass ticket and language to connect_to_game (handles kqz automatically)
+			# Pass ticket, language, and server_id to connect_to_game (handles kqz automatically)
 			# Note: Do NOT call change_auth_stage() here - that's for connection server phase
-			var err = game_client.connect_to_game(host, port, ticket, language)
+			var err = game_client.connect_to_game(host, port, ticket, language, server_id)
 			if err != OK:
 				error_received.emit("TCP_CONNECT", "Failed to connect to game server")
 			else:
 				print(
-					"[GameManager] Conexión TCP iniciada con ticket=%s..., lang=%s"
-					% [ticket.substr(0, 8), language]
+					"[GameManager] Conexión TCP iniciada con ticket=%s..., lang=%s, server=%d"
+					% [ticket.substr(0, 8), language, server_id]
 				)
 		else:
 			printerr("[GameManager] ERROR: game_client is NULL!")
@@ -292,6 +301,8 @@ func handle_tcp_message(opcode: String, payload: PackedByteArray) -> void:
 			_handle_kvi_messages(payload)
 		"jru":
 			_handle_jru_map_block(payload)
+		"jss":
+			_handle_jss_map_actors(payload)
 		"jtg":
 			_handle_jtg_end_of_burst(payload)
 		"kva":
@@ -562,25 +573,39 @@ func _update_character_stats() -> void:
 
 # Handle jru (map block / CurrentMapMessage) - CRITICAL for Godot client
 func _handle_jru_map_block(payload: PackedByteArray) -> void:
-	"""Handle map block message - the trigger for loading the world.
-	
-	The server sends it after the lqc of the character selection; the jru carries
-	the map the character is standing on.
-	"""
+	"""Handle map block message - stores map_id, waits for jss to resolve cell."""
 	if _map_block_timeout:
 		var map_data = WorldProto.decode_jru(payload)
 		if map_data.has("map_id") and map_data.map_id > 0:
 			print("[GameManager] jru - Map block received: map_id=%d" % map_data.map_id)
-			# Stop the timeout
 			on_map_block_received(map_data.map_id)
-			# TODO: Load map visualization
-			# _load_map(map_data.map_id)
-			# Emit signal for UI
-			# map_loaded.emit(map_data.map_id)
+			current_map_id = map_data.map_id
+			_pending_map_id = map_data.map_id
+			# Don't emit yet — wait for jss which carries the actual cell position
 		else:
 			print("[GameManager] jru - Map block with invalid data")
 	else:
 		print("[GameManager] jru received, but no timeout timer active")
+
+
+func _handle_jss_map_actors(payload: PackedByteArray) -> void:
+	"""Extract player cell from jss (MapActorsListMessage) and emit map_loaded."""
+	var data = WorldProto.decode_jss(payload)
+	if data.has("cell") and data.cell > 0:
+		current_cell_id = data.cell
+		if _pending_map_id > 0:
+			print(
+				"[GameManager] jss - Player cell: %d on map %d" % [current_cell_id, _pending_map_id]
+			)
+			map_loaded.emit(_pending_map_id, current_cell_id)
+			_pending_map_id = 0
+		else:
+			print(
+				"[GameManager] jss - cell=%d but no pending map (jru already emitted?)"
+				% current_cell_id
+			)
+	else:
+		print("[GameManager] jss - no cell info (might be other actors only)")
 
 
 func _on_map_block_timeout() -> void:
@@ -591,6 +616,14 @@ func _on_map_block_timeout() -> void:
 		printerr("[GameManager]   - Server delay processing")
 		printerr("[GameManager]   - Server bug - not sending jru")
 		printerr("[GameManager]   - Network issue")
+		# Fallback: if jss never arrived, emit with map_id and cell=0
+		if _pending_map_id > 0:
+			print(
+				"[GameManager] Timeout: emitting map_loaded with map_id=%d cell=0 (no jss)"
+				% _pending_map_id
+			)
+			map_loaded.emit(_pending_map_id, 0)
+			_pending_map_id = 0
 		# Disconnect safely
 		if game_client and game_client.is_tcp_connected():
 			print("[GameManager ] Disconnecting due to map timeout...")

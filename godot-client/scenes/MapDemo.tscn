@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://mmn7gnytjjgo"]
+
+[ext_resource type="Script" uid="uid://xwt0773ybyeb" path="res://src/Core/MapManager.gd" id="1"]
+
+[node name="MapDemo" type="Node2D" unique_id=1645630762 node_paths=PackedStringArray("tile_map", "cam")]
+script = ExtResource("1")
+tile_map = NodePath("TileMapLayer")
+cam = NodePath("Camera2D")
+
+[node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=1699479047]
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=494549929]
+position = Vector2(503.13, 326)

@@ -1,16 +1,10 @@
 {
 	"mcpServers": {
-		"godot-mcp-toolkit": {
-			"command": "cmd",
-			"args": [
-				"/c",
-				"npx",
-				"-y",
-				"@npgamedev/godot-mcp-server@latest"
-			],
-			"env": {
-				"GODOT_MCP_CONFIG_VERSION": "1"
-			}
+		"godot-mcp": {
+			"type": "streamableHttp",
+			"url": "http://localhost:9080/mcp",
+			"headers": {},
+			"timeout": 30000
 		}
 	}
 }

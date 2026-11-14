@@ -35,7 +35,7 @@ Content-Type: application/json
 
 **Campos:**
 - `bien`: booleano, `true` = login OK
-- `token`: 32 caracteres hexadecimales, guía del flujo. El mismo token sirve para `/api/recordar-token` en la siguiente sesión.
+- `token`: 32 caracteres hexadecimales (16 bytes aleatorios codificados), guía del flujo. El mismo token sirve para `/api/recordar-token` en la siguiente sesión.
 - `apodo`: el nickname del jugador
 - `cuenta`: ID numérico de la cuenta (también llamado `accountId`)
 - `rol`: normalmente 0; 1 o 2 es administrador
@@ -45,24 +45,24 @@ Content-Type: application/json
 ```json
 {
   "bien": false,
-  "motivo": "Contraseña incorrecta"
+  "motivo": "Some error message"
 }
 ```
 
-**Los posibles valores de `motivo`:**
-- `"Cuenta no encontrada"`
-- `"Contraseña incorrecta"` 
-- `"Cuenta bloqueada"` (por intentos fallidos)
-- `"Error de red"` (problema interno)
+**Los posibles valores de `motivo` (del servidor, en inglés):**
+- `"Please enter a username and a password."` (campos vacíos)
+- `"Password is not right length (3-32 characters)."` (contraseña fuera de rango)
+- `"Wrong username or password."` (credenciales incorrectas)
+- `"[Anti-DDoS] Too many failed attempts. Temporarily locked out for N s."` (throttle 5 intentos/60s)
 
-**Nota:** El campo se llama `motivo`, no `error`. El cliente debe leer exactamente este nombre.
+**Nota:** El campo se llama `motivo`, no `error`. El cliente debe leer exactamente este nombre y traducir al español.
 
 ### 1.4 Código del servidor
 
 En `Network/ControlApi.cs:581-609` (`Entrar`):
 - Valida credenciales con `DatabaseManager.ValidateAccountCredentials`
-- Genera token con `Guid.NewGuid().ToString("N")`
-- Registra token en `ClientLaunchRegistry.RegisterToken(accountId, token)`
+- Genera token con `Guid.NewGuid().ToString("N")` → 32 hex chars
+- Registra token en `ClientLaunchRegistry.RegisterToken`
 
 ---
 
@@ -97,6 +97,8 @@ Formato: **mensajes binarios** con prefijo de 4 bytes big-endian + JSON UTF-8. V
 - `lang`: código de idioma, `"es"`, `"en"`, `"en_US"`, etc.
 - `version`: versión del cliente, `"3.6.10.10"`. El servidor no la exige, pero enviarla evita problemas si hay validaciones de versión.
 
+**Nota:** El `installId` es obligatorio pero no se valida su contenido; solo se verifica que no esté vacío.
+
 ### 2.3 Respuesta `auth_response` (servidor → cliente)
 
 **Éxito:**
@@ -121,7 +123,7 @@ Formato: **mensajes binarios** con prefijo de 4 bytes big-endian + JSON UTF-8. V
 {
   "type": "error",
   "code": "INVALID_CREDENTIALS",
-  "message": "Token not found or expired"
+  "message": "Token and InstallId required"
 }
 ```
 
@@ -169,10 +171,10 @@ Formato: **mensajes binarios** con prefijo de 4 bytes big-endian + JSON UTF-8. V
 
 ### 2.6 El ticket y el registro
 
-El ticket es un valor de 32 caracteres hexadecimales emitido por `SessionRegistry.Issue()`. Este ticket:
+El ticket es un valor de **32 caracteres hexadecimales** emitido por `SessionRegistry.Issue()`. Este ticket:
+- Tiene **TTL de 5 minutos** (expira automáticamente)
+- Es **de uso único**: el segundo intento falla
 - Se presenta en el TCP 5555 para entrar al mundo
-- Vence temporalmente (no hay expiración explícita en el código, pero el ticket es único por sesión)
-- No se puede usar dos veces: el segundo intento falla
 
 **No hagas esto:** El código de referencia `src/lib.rs` tiene `connect_game` que envía `{"ticket":"..."}` por TCP 5555 sin el envelope protobuf. Eso es incorrecto. El ticket va dentro de un mensaje `kqz`.
 
@@ -183,18 +185,32 @@ El ticket es un valor de 32 caracteres hexadecimales emitido por `SessionRegistr
 Ver `04-MUNDO-MAPAS-MOVIMIENTO.md` §3 para el flujo completo del TCP. En resumen:
 
 ```
-kqz {f2: ticket} + krt  →  ráfaga de bienvenida (kvc, krv, kvi, kvd)
-                                →  kvw (personaje) + lqc
-                                →  jru (mapa 191105026)
+kqz + krt → kra → lqu → hoy → kqu → mgq → mgt → hpd → krs → mgz → kqp → kqp → kqp → kvi → jtg
+                               → kvw → kva → [estado inicial] → kub → lqc → jru
+                               → kqq → kqr → reconnect
+```
+
+**Nota:** La ráfaga de bienvenida **termina en `jtg`**, no en `kvd`. El `kvd` ("do not stop here") solo se usa en reconexiones a combate/koliseo (`04-MUNDO-MAPAS-MOVIMIENTO.md` detalla el flujo alternativo).
+
+**Ráfaga completa (login normal):**
+```
+kqz {f2: ticket} + krt → kra → lqu → hoy → kqu → mgq → mgt → hpd → krs → mgz → kqp×3 → kvi → jtg
+                                                                                   → kvw → [estado inicial] → kub → lqc → jru
+```
+
+**Ráfaga (reconexión a combate/koliseo):**
+```
+kqz → kvi → kvd → CharacterForceSelectionEvent (kwb) → kvw → kva → [estado] → kub → lqc → jru
 ```
 
 ---
 
 ## 4. Registro de sesión y "kick"
 
-- **Un solo cliente por cuenta:** Si un jugador intenta conectarse desde otro dispositivo, el anterior es expulsado.
-- **Token único:** Cada login genera un token nuevo. El anterior se invalida.
-- **No persistir tokens:** El token es efímero. Para recordar sesión, usar `/api/recordar-token`.
+- **Límite de clientes:** 500 total (`Contract.ClientesEnTotal`), 8 por IP (`Contract.ClientesPorIp`)
+- **Un solo cliente por cuenta:** Si un jugador intenta conectarse desde otro dispositivo, el anterior es expulsado
+- **Token único:** Cada login genera un token nuevo. El anterior se invalida
+- **No persistir tokens:** El token es efímero. Para recordar sesión, usar `/api/recordar-token`
 
 ---
 
@@ -221,9 +237,9 @@ Respuesta:
 
 **Motivos posibles:**
 - Vacío = cuenta creada
-- `"Nombre de usuario ya existe"` = nombre de usuario tomado
-- `"Contraseña demasiado corta"` = menos de 6 caracteres
-- `"Nombre de personaje no válido"` = apodo rechazado
+- `"Name of username already exists"` = nombre de usuario tomado
+- `"Password is not right length (3-32 characters)."` = contraseña fuera de rango
+- `"Invalid character name"` = apodo rechazado
 
 ---
 

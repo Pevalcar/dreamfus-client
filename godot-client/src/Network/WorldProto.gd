@@ -118,6 +118,40 @@ static func decode_jru(payload: PackedByteArray) -> Dictionary:
 	return { "map_id": map_id, "found": map_id > 0 }
 
 
+# jss: MapActorsListMessage — player position lives in f5[0].f1 { cell(varint), facing(varint) }
+# Structure: f2=mapId, f4=guildHall, f5=PlayerActor[rep], f6=subAreaId, ...
+# PlayerActor: f1{f1:cell, f2:facing}, f2{...}, f3:accountId
+#
+# NOTE: Due to Godot 4.8's 64KB TCP read limit, jss may arrive truncated.
+# This function attempts to extract the spawn cell from whatever data arrived.
+# The spawn cell is in f5[0].f1.f1 (first player, first actor field).
+static func decode_jss(payload: PackedByteArray) -> Dictionary:
+	if payload == null or payload.size() == 0:
+		return { "cell": 0, "found": false }
+	
+	# First parse the outer jss message
+	var fields = Proto.parse(payload)
+	if fields.size() == 0:
+		return { "cell": 0, "found": false }
+	
+	# Find f5 (repeated PlayerActor) - the player's spawn info is in the first entry
+	# PlayerActor.f1.f1 contains: { f1: cell, f2: facing }
+	for field in fields:
+		var field_num = field.get("n")
+		if field_num == 5 and field.has("b"):
+			# field["b"] is a PlayerActor message (f5 is repeated, each has field 1 as ActorPosition)
+			var player_fields = Proto.parse(field["b"])
+			for pfield in player_fields:
+				# PlayerActor.f1 = ActorPosition { f1: cell, f2: facing }
+				if pfield.get("n") == 1 and pfield.has("b"):
+					var actor_fields = Proto.parse(pfield["b"])
+					for afield in actor_fields:
+						# ActorPosition.f1 = cell (varint)
+						if afield.get("n") == 1 and afield.has("v"):
+							return { "cell": int(afield["v"]), "found": true }
+	return { "cell": 0, "found": false }
+
+
 # kkr: map data response (server sends map geometry)
 static func decode_kkr(payload: PackedByteArray) -> Dictionary:
 	if payload == null or payload.size() == 0:

@@ -23,12 +23,16 @@ static func read_u32_le(ba: PackedByteArray, offset: int) -> int:
 
 
 # Read a 64-bit unsigned integer in little-endian format
+## Uses int64-safe reading to avoid overflow in GDScript
 static func read_u64_le(ba: PackedByteArray, offset: int) -> int:
 	if ba == null or offset + 8 > ba.size():
 		return 0
-	return ba[offset] | (ba[offset + 1] << 8) | (ba[offset + 2] << 16) | (ba[offset + 3] << 24) | (
-		ba[offset + 4] << 32
-	) | (ba[offset + 5] << 40) | (ba[offset + 6] << 48) | (ba[offset + 7] << 56)
+	# Build 64-bit value byte by byte to avoid shift overflow
+	# Each byte contributes 8 bits
+	var result: int = 0
+	for i in range(8):
+		result |= (ba[offset + i] & 0xFF) << (i * 8)
+	return result
 
 
 # Pad array to specific size with trailing zeros

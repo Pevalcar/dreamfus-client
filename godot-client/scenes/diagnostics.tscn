@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bdiag0scene"]
+
+[ext_resource path="res://scenes/diagnostics.gd" type="Script" id="1_diag"]
+
+[node name="Diagnostics" type="Node"]
+script = ExtResource("1_diag")

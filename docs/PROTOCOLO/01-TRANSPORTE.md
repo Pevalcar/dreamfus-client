@@ -442,19 +442,22 @@ suficiente para este protocolo y no hay que pelearse con hilos.
 
 ## 4. Qué mandar en cada momento (resumen)
 
-| Cuándo | Opcode | Payload |
-|---|---|---|
-| Nada más conectar al 5555 | `kqz` | `f2: ticket` (string) |
-| Justo detrás | `krt` | vacío |
-| Tras la ráfaga de bienvenida | `kvc` | vacío |
-| Tras la ráfaga de bienvenida | `krv` | vacío |
-| Al elegir personaje | `kvw` | `f1: id` (varint) |
-| Al recibir el bloque 1 | `lqc` | vacío |
-| Cada 5 s | `kqo` | vacío |
-| Al cargar un mapa | `jrh` (+ `kmv`) | vacío |
-| Al caminar | `jrw` | `f1: mapa`, `f2: packed (facing<<12)\|celda` |
-| Al llegar a un borde | `jqi` | vacío |
-| Tras el `jsq` | `jqk` | `f2: mapa` |
+| Cuándo | Opcode | Dirección | Payload |
+|---|---|---|---|
+| Nada más conectar al 5555 | `kqz` | C→S | `f2: ticket` (string) |
+| Justo detrás | `krt` | C→S | vacío |
+| Al elegir personaje | `kvw` | C→S | `f1: id` (varint) |
+| Tras la ráfaga de bienvenida | `kvc` | C→S | vacío (CharacterListRequest) |
+| Tras recibir `kub` | `lqc` | C→S | vacío (SequenceNumberRequest) |
+| Cada 5 s | `kqo` | C→S | vacío (PingRequest) |
+| Al cargar un mapa | `jrh` (+ `kmv`) | C→S | vacío |
+| Al caminar | `jrw` | C→S | `f1: mapa`, `f2: packed (facing<<12)\|celda` |
+| Al llegar a un borde | `jqi` | C→S | vacío |
+| Tras el `jsq` | `jqk` | C→S | `f2: mapa` |
+
+Nada más. Todo lo demás lo manda el servidor.
+
+> **Nota:** En login normal, el servidor **no responde** a `kvc`/`krv` porque ya envió `kvi` en el burst. En reconexión a combate/koliseo, el servidor sí responde con `kvi` + `kvd`.
 
 Nada más. Todo lo demás lo manda el servidor.
 

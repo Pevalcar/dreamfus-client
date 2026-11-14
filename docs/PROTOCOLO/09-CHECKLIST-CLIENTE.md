@@ -366,7 +366,42 @@ Game (Control, script: GameUI.gd)
 
 ---
 
-## 3. Errores conocidos que hay que arreglar
+## 3. Errores críticos (requieren cambios en el servidor)
+
+| # | Error | Archivo | Causa | Solución Requerida |
+|---|-------|---------|-------|-------------------|
+| 9 | `jss` truncado a 64KB (límite Godot TCP) | `BuildMapActors()` en servidor | El servidor envía TODOS los jugadores en el mapa en `f5[rep]`, haciendo jss > 64KB | Filtrar para solo incluir el jugador local en `f5[0]` |
+| 10 | `jss` nunca se recibe (timeout) | `GameClient.gd` | Error "Buffer insuficiente: need 101962, have 65536" causa que el frame jamse complete | Ver error #9 |
+
+### Detalles del problema jss (MapActorsListMessage)
+
+**Tamaño esperado del jss:** < 64KB para Godot 4.8
+
+**Estructura del jss:**
+- `f2`: mapId
+- `f6`: subAreaId  
+- `f5` (repetido): lista de actores (PROBLEMA AQUÍ)
+  - `f1`: { f1: cell, f2: facing } ← Spawn cell está aquí
+  - `f7`: tipo_actor (1=jugador, 4=monstruo, 7=NPC)
+- `f11`: interactivos
+- `f12`: celdas de pelea
+
+**Causa del problema:** Cada jugador en el mapa agrega ~500-1000 bytes. Con 2-3 jugadores, jss supera 64KB.
+
+**Solución en el servidor:**
+```csharp
+// En ConnectionProtocol.cs / BuildMapActors()
+// SOLO incluir al jugador local, NO otros jugadores del mapa
+foreach (var actor in session.GetLocalPlayerOnly()) {
+    jss.Actors.Add(actor);
+}
+```
+
+**Test de verificación:** 
+- Mapa 88212759, spawn cell esperado: 352
+- Verificado en world.db Characters table
+
+---
 
 | # | Error | Archivo | Línea | Causa | Arreglo |
 |---|-------|---------|-------|-------|---------|

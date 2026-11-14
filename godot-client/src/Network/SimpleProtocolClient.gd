@@ -1,3 +1,4 @@
+class_name SimpleProtocolClient
 # SimpleProtocolClient - WebSocket client for game server communication
 # Not using class_name to avoid conflicts with scene node assignments in Godot 4.8 beta2
 extends Node
@@ -42,7 +43,7 @@ var state: ClientState = ClientState.DISCONNECTED
 var _websocket: WebSocketPeer = null
 var _buffer: PackedByteArray = PackedByteArray()
 var _pending_connections: Array = []
-var _connection_logged: bool = false  # Track if we logged state changes to reduce spam
+var _connection_logged: bool = false # Track if we logged state changes to reduce spam
 
 ## Auth parameters to send when connection opens
 var _auth_lang: String = ""
@@ -54,6 +55,9 @@ var _lang_code: String = "" # Store lang for server selection
 func _ready() -> void:
 	print("[SimpleProtocolClient] Inicializado")
 	_websocket = WebSocketPeer.new()
+	_websocket.inbound_buffer_size = 262144 # 1 MB buffer for incoming data
+	_websocket.outbound_buffer_size = 262144 # 1 MB buffer for outgoing data
+
 	_pending_connections = []
 	# Set reference to GameManager singleton
 	if game_manager == null:
@@ -103,10 +107,10 @@ func _process(delta: float) -> void:
 	elif ws_state == STATE_CLOSED or ws_state == STATE_CLOSING:
 		var was_connecting := state == ClientState.CONNECTING
 		var was_connected := state == ClientState.CONNECTED
-		
+
 		# Reset connection logging for next connection attempt
 		_connection_logged = false
-		
+
 		if was_connecting and not was_connected:
 			# Normal closure after server_selection_response should NOT be an error
 			# But if we never connected, it's an error
@@ -188,6 +192,8 @@ func send_message(message_type: String, payload: Dictionary) -> void:
 	var err := _websocket.put_packet(packet)
 	if err != OK:
 		printerr("[SimpleProtocolClient] Error enviando paquete: %d" % err)
+	else:
+		print("[SimpleProtocolClient] put_packet OK, size=%d" % packet.size())
 
 
 func send_auth_request(lang: String, token: String, install_id: String) -> void:
