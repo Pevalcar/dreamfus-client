@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dby4ej03jgu2m" path="res://src/UI/CharacterSelectUI.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://c5fuxlxoa8thm" path="res://icon.svg" id="2_rpq25"]
-[ext_resource type="Script" uid="uid://char_detail_panel" path="res://src/UI/CharacterDetailPanel.gd" id="3_char_detail"]
+[ext_resource type="Script" uid="uid://c66jjue18frra" path="res://src/UI/CharacterDetailPanel.gd" id="3_char_detail"]
 
 [node name="CharacterSelectUI" type="Control" unique_id=610510199]
 layout_mode = 3
