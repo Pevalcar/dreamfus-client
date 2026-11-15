@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "godot-mcp": {
+      "url": "http://localhost:21485/mcp/p/4de14540",
+      "description": "Godot MCP server for AI code navigation"
+    }
+  }
+}
