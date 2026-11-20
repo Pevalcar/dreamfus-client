@@ -22,11 +22,11 @@ static func write_varint(buf: PackedByteArray, value: int) -> void:
 	# For VarInt, we encode the raw bits - Godot handles int as signed
 	# This works for positive values; for negative, we need to handle carefully
 	if v < 0:
-		# For negative values, we'll encode -1 (all 0xFF bytes) for simplicity
-		# In practice, negative varints are encoded as their 64-bit unsigned representation
-		v = 0xFFFFFFFFFFFFFFFF + v + 1 # Two's complement for 64-bit
+		# Para valores negativos, codificamos usando complemento a 2
+		# El valor 0xFFFFFFFFFFFFFFFF no cabe en int64 de Godot, así que usamos una aproximación
+		v = int(v & 0xFFFFFFFFFFFFFFFF)  # Máscara para valores negativos
 	else:
-		v = int(v) & 0xFFFFFFFFFFFFFFFF # Ensure positive
+		v = int(v) & 0xFFFFFFFFFFFFFFFF  # Asegurar positivo
 	while v > 0x7F:
 		# Write 7 bits with continuation flag
 		buf.append((v & 0x7F) | 0x80)
@@ -845,4 +845,112 @@ static func _parse_ports(data: PackedByteArray) -> Array:
 		else:
 			break
 
+	return result
+
+
+# ============================================================================
+# Ticket Validation (RF-6.2, RNF-4)
+# ============================================================================
+## Regex para validar ticket kqz: 32 caracteres hexadecimales minúsculas
+const TICKET_REGEX := "^[0-9a-f]{32}$"
+
+
+## Valida ticket kqz según RF-6.2 y RNF-4
+## CUANDO el cliente recibe el ticket, EL CLIENTE valida que cumpla el patrón `^[0-9a-f]{32}$`
+## y normaliza a minúsculas antes de enviarlo.
+## 
+## Args:
+##     ticket: String - El ticket a validar
+##
+## Returns:
+##     Dictionary con:
+##       - valid: bool - true si el ticket es válido
+##       - normalized: String - el ticket normalizado a minúsculas (si es válido)
+##       - error: String - mensaje de error (si es inválido)
+static func validate_ticket(ticket: Variant) -> Dictionary:
+	"""Valida ticket kqz según RF-6.2 y RNF-4.
+	
+	Patrones aceptados:
+	- 32 caracteres hexadecimales minúsculas: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+	- Se normalizan mayúsculas a minúsculas
+	
+	Patrones rechazados:
+	- Longitud != 32 caracteres
+	- Caracteres no hexadecimales (a-f, 0-9)
+	- Null, vacío, espacios, guiones, etc.
+	"""
+	# Manejar null
+	if ticket == null:
+		return { "valid": false, "error": "Ticket nulo" }
+	
+	# Convertir a string y verificar tipo
+	if typeof(ticket) != TYPE_STRING:
+		return { "valid": false, "error": "Ticket no es string" }
+	
+	var ticket_str = str(ticket)
+	
+	# Verificar longitud exacta de 32 caracteres
+	if ticket_str.length() != 32:
+		return { "valid": false, "error": "Ticket debe tener exactamente 32 caracteres" }
+	
+	# Normalizar a minúsculas
+	var normalized = ticket_str.to_lower()
+	
+	# Validar con regex: solo caracteres hexadecimales minúsculos
+	var regex = RegEx.new()
+	var err = regex.compile(TICKET_REGEX)
+	if err != OK:
+		push_error("TicketValidation: Error al compilar regex")
+		return { "valid": false, "error": "Error interno de validación" }
+	
+	var match = regex.search(normalized)
+	if match == null:
+		return { "valid": false, "error": "Ticket contiene caracteres no hexadecimales" }
+	
+	return { "valid": true, "normalized": normalized }
+
+
+## Construye GameMessage kqz para envío directo al servidor GameNode
+## RF-6.1, RF-6.2, RF-6.3: f1=mensaje interno, f2=ticket, f3=language
+##
+## Args:
+##     ticket: String - 32 caracteres hexadecimales (se valida y normaliza)
+##     lang: String - Código ISO 639-1 (ej: "es", "en")
+##
+## Returns:
+##     PackedByteArray - GameMessage listo para envío, o null si el ticket es inválido
+static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
+	"""Construye GameMessage kqz directo (sin wrapper Any) según RF-6.1, 6.3.
+	
+	El formato es: f1 { f2: ticket, f3: language }
+	Esto evita el wrapper Any según RF-6.1
+	
+	Args:
+		ticket: 32 caracteres hexadecimales (se valida automáticamente)
+		lang: código ISO 639-1
+	
+	Returns:
+		GameMessage como PackedByteArray, o null si ticket inválido
+	"""
+	# Validar ticket primero (RF-6.2)
+	var validation = validate_ticket(ticket)
+	if not validation["valid"]:
+		push_error("build_kqz_message: Ticket inválido - %s" % validation["error"])
+		return PackedByteArray()
+	
+	var normalized_ticket = validation["normalized"]
+	
+	# Construir el mensaje interno f1 { f2: ticket, f3: language }
+	var inner_message := PackedByteArray()
+	
+	# Campo 2 (f2): ticket como string length-delimited
+	put_string(inner_message, 2, normalized_ticket)
+	
+	# Campo 3 (f3): language como string length-delimited
+	put_string(inner_message, 3, lang)
+	
+	# Envolver en f1: el mensaje interno completo
+	var result := PackedByteArray()
+	put_bytes(result, 1, inner_message)
+	
 	return result

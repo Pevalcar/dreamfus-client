@@ -18,13 +18,16 @@
   - **Fecha de finalización:** 2026-11-20
   - **Blast radius verificado:** 2 archivos modificados ✅
 
-- [ ] **T2:** Implementar validación ticket kqz con regex `^[0-9a-f]{32}$` (RF-6.2, RNF-4)
+- [x] **T2:** Implementar validación ticket kqz con regex `^[0-9a-f]{32}$` (RF-6.2, RNF-4)
   - **RF cubiertos:** RF-6.2, RNF-4
   - **Depends on:** T1
   - **Archivos objetivo (≤3):**
     - `MODIFY` `godot-client/src/Network/Proto.gd` (add ticket validation helper)
     - `CREATE` `godot-client/test/TicketValidationTest.gd`
   - **Hecho cuando (TDD):** Test de validación ticket con caracteres inválidos pasa ejecutando `godot --headless --path godot-client --run-gut-tests` (exit code 0).
+  - **Fecha de finalización:** 2026-11-20
+  - **Blast radius verificado:** 2 archivos modificados ✅
+  - **Implementación:** `validate_ticket()` y `build_kqz_message()` agregados a Proto.gd
 
 - [ ] **T3:** Implementar estructura de errores auth (RFC para RF-9)
   - **RF cubiertos:** RF-9

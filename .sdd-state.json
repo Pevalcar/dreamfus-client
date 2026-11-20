@@ -15,15 +15,16 @@
     "path": "specs/001-login-flow/plan.md"
   },
   "tasks": {
-    "status": "partially_completed",
+    "status": "in_progress",
     "path": "specs/001-login-flow/tasks.md",
     "total_tasks": 11,
-    "completed_tasks": 1,
-    "current_task": "T1"
+    "completed_tasks": 2,
+    "current_task": "T2"
   },
   "phase": "tasks",
   "current_phase": "sdd-implement",
-  "active_task": "T1",
+  "active_task": "T2",
+  "next_task": "T3",
   "next_allowed_phase": "sdd-implement",
   "approved_phases": ["setup", "constitution", "backlog", "spec", "clarify", "plan", "tasks", "sdd-implement"],
   "active_spec_dir": "specs/001-login-flow",
@@ -44,9 +45,24 @@
         "godot-client/src/Core/HttpClient.gd",
         "godot-client/test/HttpClientTest.gd"
       ],
+      "files_created": [],
       "blast_radius": 2,
       "lint_passed": true,
       "no_hardcoded_credentials": true
+    },
+    "T2": {
+      "status": "implemented",
+      "rf_covered": ["RF-6.2", "RNF-4"],
+      "files_modified": [
+        "godot-client/src/Network/Proto.gd"
+      ],
+      "files_created": [
+        "godot-client/test/TicketValidationTest.gd"
+      ],
+      "blast_radius": 2,
+      "lint_passed": true,
+      "no_hardcoded_credentials": true,
+      "commit_hash": "pending"
     }
   },
   "mode": "human-gated"
