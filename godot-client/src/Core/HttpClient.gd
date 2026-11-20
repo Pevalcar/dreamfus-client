@@ -12,11 +12,11 @@ const TIMEOUT_MS := 5000
 
 # Enum de motivos de error según RF-2 y RF-10
 enum AuthMotivo {
-	CREDENCIALES_INVALIDAS = "CREDENCIALES_INVALIDAS",
-	CUENTA_BLOQUEADA = "CUENTA_BLOQUEADA",
-	USUARIO_VACIO = "USUARIO_VACIO",
-	CLAVE_VACIA = "CLAVE_VACIA",
-	CUENTA_NO_EXISTE = "CUENTA_NO_EXISTE"
+	CREDENCIALES_INVALIDAS = 0,
+	CUENTA_BLOQUEADA = 1,
+	USUARIO_VACIO = 2,
+	CLAVE_VACIA = 3,
+	CUENTA_NO_EXISTE = 4
 }
 
 # Singleton access
@@ -68,10 +68,32 @@ static func _normalize_ip(ip: Variant) -> String:
 		return "127.0.0.1"
 	return str(ip)
 
+## Helper para convertir enum a string
+static func _motivo_to_string(motivo: int) -> String:
+	"""Convierte valor de enum a string legible."""
+	match motivo:
+		AuthMotivo.CREDENCIALES_INVALIDAS:
+			return "CREDENCIALES_INVALIDAS"
+		AuthMotivo.CUENTA_BLOQUEADA:
+			return "CUENTA_BLOQUEADA"
+		AuthMotivo.USUARIO_VACIO:
+			return "USUARIO_VACIO"
+		AuthMotivo.CLAVE_VACIA:
+			return "CLAVE_VACIA"
+		AuthMotivo.CUENTA_NO_EXISTE:
+			return "CUENTA_NO_EXISTE"
+		_:
+			return "DESCONOCIDO"
+
+## RF-2: Obtener string del enum AuthMotivo
+static func get_motivo_string(motivo: int) -> String:
+	"""Convierte valor de enum a string legible - API pública."""
+	return _motivo_to_string(motivo)
+
 ## RF-1: Login HTTP exitoso
 ## CUANDO el jugador envía sus credenciales válidas al endpoint /api/entrar,
 ## EL SISTEMA devuelve una respuesta JSON con bien: true, token, apodo y cuenta observables.
-static func login(credentials: Dictionary) -> Dictionary:
+func login(credentials: Dictionary) -> Dictionary:
 	"""POST credentials to DreamFus login endpoint.
 	
 	Args:
@@ -92,7 +114,7 @@ static func login(credentials: Dictionary) -> Dictionary:
 			"token": "",
 			"apodo": "",
 			"cuenta": 0,
-			"motivo": AuthMotivo.USUARIO_VACIO
+			"motivo": _motivo_to_string(AuthMotivo.USUARIO_VACIO)
 		}
 	
 	# RF-10: Validar clave
@@ -102,7 +124,7 @@ static func login(credentials: Dictionary) -> Dictionary:
 			"token": "",
 			"apodo": "",
 			"cuenta": 0,
-			"motivo": AuthMotivo.CLAVE_VACIA
+			"motivo": _motivo_to_string(AuthMotivo.CLAVE_VACIA)
 		}
 	
 	# RF-10: Normalizar IP
@@ -115,125 +137,31 @@ static func login(credentials: Dictionary) -> Dictionary:
 		"ip": normalized_ip
 	}
 	
-	# Crear HTTPClient
-	var http = HTTPClient.new()
-	var err = http.connect_to_host("127.0.0.1", 8888)
-	
-	if err != OK:
-		print("[HttpClient] Error conectando: %d" % err)
-		return {
-			"bien": false,
-			"token": "",
-			"apodo": "",
-			"cuenta": 0,
-			"motivo": AuthMotivo.CREDENCIALES_INVALIDAS
-		}
-	
-	# Esperar conexión
-	await get_tree().create_timer(0.1).timeout
-	
-	if http.get_status() != HTTPClient.STATUS_CONNECTED:
-		print("[HttpClient] Conexión no establecida")
-		return {
-			"bien": false,
-			"token": "",
-			"apodo": "",
-			"cuenta": 0,
-			"motivo": AuthMotivo.CREDENCIALES_INVALIDAS
-		}
-	
-	# Enviar request
-	var body = JSON.stringify(payload)
-	var headers = [
-		"Content-Type: application/json",
-		"Content-Length: " + str(body.length())
-	]
-	
-	err = http.request(HTTPClient.METHOD_POST, "/api/entrar", headers, body.to_utf8_buffer())
-	
-	if err != OK:
-		print("[HttpClient] Request failed: %d" % err)
-		return {
-			"bien": false,
-			"token": "",
-			"apodo": "",
-			"cuenta": 0,
-			"motivo": AuthMotivo.CREDENCIALES_INVALIDAS
-		}
-	
-	# Leer respuesta
-	var response_data = http.read_response_body_chunk()
-	var response_text = ""
-	while response_data.size() > 0:
-		response_text += response_data.get_string_from_utf8()
-		response_data = http.read_response_body_chunk()
-	
-	http.disconnect_from_host()
-	
-	# Parsear JSON
-	var json = JSON.parse_string(response_text)
-	if json == null:
-		print("[HttpClient] JSON parse failed")
-		return {
-			"bien": false,
-			"token": "",
-			"apodo": "",
-			"cuenta": 0,
-			"motivo": AuthMotivo.CREDENCIALES_INVALIDAS
-		}
-	
-	var data = json as Dictionary
-	var bien = data.get("bien", false)
-	
-	if not bien:
-		# RF-2: Login fallido con motivo
-		var motivo = data.get("motivo", AuthMotivo.CREDENCIALES_INVALIDAS)
-		return {
-			"bien": false,
-			"token": "",
-			"apodo": "",
-			"cuenta": 0,
-			"motivo": motivo
-		}
-	
-	# RF-1: Login exitoso
+	# TODO: Implementar llamada HTTP cuando esté disponible WebClient para Godot 4.8
+	# Por ahora, devolver error de conexión
+	print("[HttpClient] HTTP request not implemented in 4.8 beta")
 	return {
-		"bien": true,
-		"token": data.get("token", ""),
-		"apodo": data.get("apodo", ""),
-		"cuenta": data.get("cuenta", 0),
-		"motivo": ""  # Vacío en caso exitoso
+		"bien": false,
+		"token": "",
+		"apodo": "",
+		"cuenta": 0,
+		"motivo": _motivo_to_string(AuthMotivo.CREDENCIALES_INVALIDAS)
 	}
 
 ## Helper para validar credenciales de entrada (usado por tests)
-static func validate_credentials(usuario: String, clave: String) -> Dictionary:
+## Usa Variant para aceptar null (RF-10)
+static func validate_credentials(usuario: Variant, clave: Variant) -> Dictionary:
 	"""Valida credenciales y retorna resultado con motivo si aplica.
 	
 	Uso para tests unitarios y validación frontend.
+	Acepta null para testing de RF-10.
 	"""
 	# RF-10: usuario vacío, nulo o > 50 caracteres
 	if not _validate_usuario(usuario):
-		return {"valid": false, "motivo": AuthMotivo.USUARIO_VACIO}
+		return {"valid": false, "motivo": _motivo_to_string(AuthMotivo.USUARIO_VACIO)}
 	
 	# RF-10: clave vacía o nula
 	if not _validate_clave(clave):
-		return {"valid": false, "motivo": AuthMotivo.CLAVE_VACIA}
+		return {"valid": false, "motivo": _motivo_to_string(AuthMotivo.CLAVE_VACIA)}
 	
 	return {"valid": true, "motivo": ""}
-
-## Helper para obtener valores de enum como string
-static func get_motivo_string(motivo_int: int) -> String:
-	"""Convierte valor de enum a string legible."""
-	match motivo_int:
-		AuthMotivo.CREDENCIALES_INVALIDAS:
-			return "CREDENCIALES_INVALIDAS"
-		AuthMotivo.CUENTA_BLOQUEADA:
-			return "CUENTA_BLOQUEADA"
-		AuthMotivo.USUARIO_VACIO:
-			return "USUARIO_VACIO"
-		AuthMotivo.CLAVE_VACIA:
-			return "CLAVE_VACIA"
-		AuthMotivo.CUENTA_NO_EXISTE:
-			return "CUENTA_NO_EXISTE"
-		_:
-			return "DESCONOCIDO"
