@@ -51,7 +51,7 @@
       "no_hardcoded_credentials": true
     },
     "T2": {
-      "status": "implemented",
+      "status": "completed",
       "rf_covered": ["RF-6.2", "RNF-4"],
       "files_modified": [
         "godot-client/src/Network/Proto.gd"
@@ -62,7 +62,7 @@
       "blast_radius": 2,
       "lint_passed": true,
       "no_hardcoded_credentials": true,
-      "commit_hash": "pending"
+      "commit_hash": "9a44a8d"
     }
   },
   "mode": "human-gated"
