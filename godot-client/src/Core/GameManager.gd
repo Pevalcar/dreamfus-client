@@ -288,6 +288,8 @@ func handle_kva_with_id(payload: PackedByteArray, character_id: int) -> void:
 # Handle TCP message by opcode
 func handle_tcp_message(opcode: String, payload: PackedByteArray) -> void:
 	match opcode:
+		"kra":
+			_handle_kra_ack(payload)  # RF-8: Ack of kqz ticket (welcome burst start)
 		"kvi":
 			_handle_kvi_messages(payload)
 		"jru":
@@ -418,6 +420,16 @@ func _handle_kva(payload: PackedByteArray) -> void:
 	# kva indicates the character is alive and can receive Block 1 messages
 	# The character_id is extracted from the payload during TCP handshake
 	print("[GameManager] kva recibido — character alive confirmation")
+
+
+# Handle kra (ticket ack) message - part of welcome burst
+# RF-8: kra is the first message in the welcome burst, acknowledging kqz ticket
+# kra is a push message with empty payload
+func _handle_kra_ack(payload: PackedByteArray) -> void:
+	print("[GameManager] kra recibido — ticket acked (welcome burst start)")
+	# kra is an empty acknowledgment that the server accepted the kqz ticket
+	# This signals the start of the welcome burst sequence: kra → kvi → jtg
+	_current_auth_stage = "waiting_for_kvi"
 
 
 # Handle kvi (character list) message - part of welcome burst

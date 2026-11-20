@@ -49,8 +49,10 @@
 | Archivo | Propósito | RF(s) |
 |---------|-----------|-------|
 | `godot-client/src/Core/HttpClient.gd` | Cliente HTTP login (puerto 8888) | RF-1, RF-2, RF-10 |
+| `godot-client/src/Data/AuthError.gd` | Estructura de errores auth (RFC para RF-9) | RF-9 |
 | `godot-client/src/Core/AuthManager.gd` | Manejo de errores y estados de autenticación | RF-7, RNF-7, RNF-9 |
 | `godot-client/test/HttpClientTest.gd` | Tests unitarios HTTP client | RF-1, RF-2, RF-10 |
+| `godot-client/test/AuthErrorTest.gd` | Tests estructura AuthError | RF-9 |
 | `godot-client/test/WebSocketClientTest.gd` | Tests unitarios WebSocket client | RF-3, RF-4 |
 | `godot-client/test/TcpKqzTest.gd` | Tests unitarios kqz/TCP | RF-6, RF-6.1, RF-6.2, RF-6.3 |
 | `godot-client/test/WalkingSkeletonTest.gd` | Test E2E del flujo completo | RF-1, RF-2, RF-5, RF-6, RF-7 |
@@ -216,7 +218,7 @@ Packet {
 | **RF-6.3** | Envío inmediato del ticket | `GameClient.gd` | E2E: `test_kqz_burst_e2e.gd` |
 | **RF-7** | Mensaje de error cuando el servidor está caído | `AuthManager.gd`, `SimpleProtocolClient.gd` | Unit: `ErrorHandlingTest.gd` |
 | **RF-8** | Welcome Burst processing | `GameClient.gd` | E2E: `test_kqz_burst_e2e.gd` |
-| **RF-9** | Rechazo de conexión inválida | `SimpleProtocolClient.gd` | Integration: `WebSocketClientTest.gd` |
+| **RF-9** | Rechazo de conexión inválida | `SimpleProtocolClient.gd`, `AuthError.gd` | Unit: `AuthErrorTest.gd` + Integration: `WebSocketClientTest.gd` |
 | **RF-10** | Validación de credenciales de entrada | `HttpClient.gd` | Unit: `HttpClientTest.gd` |
 
 | RNF | Descripción | Verificación |
@@ -333,8 +335,57 @@ grep -rnE "(password|token|secret|credential)" --include="*.gd" godot-client/src
 - [x] RF-5, RF-6: GameClient.gd con ticket/kqz
 - [x] RF-7: Manejo errores con popup
 - [x] RF-8: Welcome burst processing
-- [x] RF-9: Rechazo de token inválido
+- [x] RF-9: Rechazo de token inválido → `AuthError.gd` con enum ErrorType
 - [x] RF-10: Validación credenciales de entrada
+
+### T3 Completado: AuthError.gd
+
+**Archivo creado:** `godot-client/src/Data/AuthError.gd`
+
+**Enum ErrorType (RF-9):**
+- `TOKEN_INVALIDO = 0`
+- `TOKEN_EXPIRADO = 1`
+- `TOKEN_NO_REGISTRADO = 2`
+
+**Factory methods:**
+- `invalid_token()` - crea error para token inválido
+- `expired_token()` - crea error para token expirado
+- `not_registered_token()` - crea error para token no registrado
+
+**Métodos:**
+- `get_error_string()` - devuelve string para JSON response
+- `to_dict()` - convierte a dictionary para serialización JSON
+
+### T4 Completado: WebSocketClientTest.gd
+
+**Archivos modificados:**
+- `godot-client/src/Network/SimpleProtocolClient.gd` - Validación token, estados, RF-9 error handling
+
+**Archivos creados:**
+- `godot-client/test/WebSocketClientTest.gd` - 30+ tests unitarios RF-3, RF-4, RF-5, RF-9
+
+**Mejoras:**
+- Preload Proto.gd para validación de ticket
+- Método `get_lang()` para obtener código de idioma
+- Manejo de errores RF-9 en auth_response con `error_received.emit()`
+
+### T5 Completado: ServerSelectionTest.gd
+
+**Archivos modificados:**
+- `godot-client/src/Network/SimpleProtocolClient.gd` - Ya procesa server_selection_response (líneas 274-285)
+
+**Archivos creados:**
+- `godot-client/test/ServerSelectionTest.gd` - 50+ tests con tests de:
+  - Server selection response schema
+  - RF-5: success/failure structures
+  - RF-6.2: Ticket validation (regex ^[0-9a-f]{32}$)
+  - RF-6.3: Ticket immediate sending
+  - Error cases (SERVIDOR_NO_EXISTE, SERVIDOR_LLENO, CUENTA_NO_AUTORIZADA)
+
+**Implementación:**
+- server_selection_response procesado en _process_buffer() (líneas 274-285)
+- Schema de servers con id, name, population, is_full ya implementado
+- send_server_selection() ya implementado con tipo, server_id, account_id, lang
 
 ---
 

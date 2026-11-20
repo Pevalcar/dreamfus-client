@@ -24,6 +24,7 @@ enum ClientState {
 
 ## Preload ByteArrayExtensions helper para Godot 4.8
 const ByteArrayExtensions = preload("res://src/Utils/ByteArrayExtensions.gd")
+const Proto = preload("res://src/Network/Proto.gd")
 
 # WebSocketPeer.State values (Godot 4.8 beta2)
 const STATE_CONNECTING: int = WebSocketPeer.STATE_CONNECTING
@@ -192,6 +193,15 @@ func send_message(message_type: String, payload: Dictionary) -> void:
 
 func send_auth_request(lang: String, token: String, install_id: String) -> void:
 	print("[SimpleProtocolClient] send_auth_request called (state=%s)" % state)
+	
+	# RF-4: Validar token antes de enviar (si el token es del formato esperado)
+	if token != "" and typeof(token) == TYPE_STRING and token.length() > 0:
+		# Validar que el token no esté vacío y sea un string válido
+		if not token.strip_edges().length() > 0:
+			print("[SimpleProtocolClient] Token vacío, no se envía auth_request")
+			error_received.emit("TOKEN_INVALIDO", "Token vacío o inválido")
+			return
+	
 	var payload = {
 		"type": "auth_request",
 		"lang": lang,
@@ -200,6 +210,11 @@ func send_auth_request(lang: String, token: String, install_id: String) -> void:
 		"version": "3.6.10.10",
 	}
 	send_message("auth_request", payload)
+
+
+func get_lang() -> String:
+	"""RF-4: Obtiene el código de idioma almacenado para server_selection -> kqz"""
+	return _lang_code if _lang_code != "" else "es"
 
 
 func send_server_selection(server_id: int, account_id: int, lang: String) -> void:
@@ -244,12 +259,18 @@ func _process_buffer() -> void:
 	var msg_type: String = payload.get("type", "unknown")
 
 	if msg_type == "auth_response":
-		auth_response_received.emit(
-			payload.get("success", false),
-			payload.get("account_id", 0),
-			payload.get("servers", []) as Array,
-			payload.get("error", ""),
-		)
+		var success := payload.get("success", false)
+		var error_msg := payload.get("error", "")
+		var account_id := payload.get("account_id", 0)
+		var servers := payload.get("servers", []) as Array
+		
+		if not success:
+			# RF-9: Manejo de rechazo de conexión inválida
+			# Los errores pueden ser: TOKEN_INVALIDO, TOKEN_EXPIRADO, TOKEN_NO_REGISTRADO
+			print("[SimpleProtocolClient] auth_response con error: %s" % error_msg)
+			error_received.emit("AUTH_ERROR", error_msg)
+		
+		auth_response_received.emit(success, account_id, servers, error_msg)
 	elif msg_type == "server_selection_response":
 		# Preserve the language from auth params for kqz ticket sending
 		# Use _lang_code as the source of truth (set during connect_to_server)
