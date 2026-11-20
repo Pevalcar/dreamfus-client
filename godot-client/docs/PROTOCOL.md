@@ -197,25 +197,14 @@ Cliente → Servidor: kvw (character selection, triggered by jtg)
 
 El cliente envía el ticket para autenticarse con el servidor de juego:
 
-**Estructura protobuf:**
+**Estructura protobuf (GameMessage directo, sin Any wrapper):**
 ```
-f1 { Any {
-  f1: "type.ankama.com/kqz"
-  f2: { f2: ticket, f3: language }
-}
+f1 { f2: ticket, f3: language }
 ```
 
 **Implementación en Godot:**
 - Usa `GameClient.send_ticket(ticket, language)`
 - Lenguaje opcional (por defecto "es")
-
-**Sobre el campo raíz:** el servidor no depende de que sea `f1` o `f2`. Tanto su
-enrutado (`payloadStr.Contains("type.ankama.com/kqz")`) como `ConnectionProtocol.ReadPayload`
-**buscan el marcador `type.ankama.com/` en los bytes crudos**, así que el número del campo
-raíz da igual. Los pushes del servidor, en cambio, van **doble anidados**:
-`f1 { f1 { f1: type_url, f2: payload } }` (`ConnectionProtocol.Push`). Por eso
-`Proto.decode()` localiza el `type_url` escaneando el frame en vez de recorrer campos; no
-lo cambies a un recorrido por número de campo.
 
 ### Formato de Mensaje kvi (Character List)
 

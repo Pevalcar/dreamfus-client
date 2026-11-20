@@ -721,6 +721,110 @@
       "skillPath": "skills/planning-and-task-breakdown/SKILL.md",
       "computedHash": "e4ef8d478d672103693af0cab5a97a1914f776099ef0756c2a093d9ae061f024"
     },
+    "sdd-backlog": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-backlog/SKILL.md",
+      "computedHash": "abbd594aad64ca5259622c35d3e03846820ec09dbf59fc2a86a799b5684c1e3c",
+      "installMode": "copy"
+    },
+    "sdd-clarify": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-clarify/SKILL.md",
+      "computedHash": "02b78393d26e7dd3f6fd639fa8fb2a00a7b9cba35ca5ad431a8d2f8826035a58",
+      "installMode": "copy"
+    },
+    "sdd-constitution": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-constitution/SKILL.md",
+      "computedHash": "35b07244480b51a22e59edfdec4d342df132a5d2506fcafabc44562985663122",
+      "installMode": "copy"
+    },
+    "sdd-discover": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-discover/SKILL.md",
+      "computedHash": "80efbb203cd7bfcb41fc17ba4f197ceaa4ec1b2fe673590e1e3d75e5d1a11c76",
+      "installMode": "copy"
+    },
+    "sdd-flow": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-flow/SKILL.md",
+      "computedHash": "356ad0596c95e11973197a2120e7fd8b3c3f9ff221b9651509177c5da7fd9739",
+      "installMode": "copy"
+    },
+    "sdd-implement": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-implement/SKILL.md",
+      "computedHash": "6cdd90a4bea9e984cd4c82f7ae1143d813af1abd984eb8e0f96f9df2e14f7320",
+      "installMode": "copy"
+    },
+    "sdd-plan": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-plan/SKILL.md",
+      "computedHash": "3ed499152f5f68a75594e9cff331b428fb6dd0125ed7ff2b916d14a18b82eb69",
+      "installMode": "copy"
+    },
+    "sdd-review": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-review/SKILL.md",
+      "computedHash": "ff677e6cbfd39ce7fc6f57644eb84ce1f7e845cb01dcad963156270559738628",
+      "installMode": "copy"
+    },
+    "sdd-setup": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-setup/SKILL.md",
+      "computedHash": "48efc1147854ba5e65719920882bd2cd5e15596bea15bcb8b032060c569a471a",
+      "installMode": "copy"
+    },
+    "sdd-spec": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-spec/SKILL.md",
+      "computedHash": "d8e78cc73b8392e5c5507a3dffe9187727a36f06d14c0248224d933860697d18",
+      "installMode": "copy"
+    },
+    "sdd-tasks": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-tasks/SKILL.md",
+      "computedHash": "06f44e44d926c85d4697c8c9734642659ce21ea39f55484af6eb8b86bdf49a6f",
+      "installMode": "copy"
+    },
+    "sdd-validate": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-validate/SKILL.md",
+      "computedHash": "555394bda24cb59c55382d345ac0e8837cc65e023ee2e31a0749fbfd2797f3cf",
+      "installMode": "copy"
+    },
+    "sdd-variants": {
+      "source": "Pevalcar/sdd-skills",
+      "commit": "a9dc63c85527a8b082aa35d1f43e3dbc724e34ae",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-variants/SKILL.md",
+      "computedHash": "8ba2fe03db5790e1dfcebfe9047c739a42ffdc0b71297d5838353358b9fd1bfa",
+      "installMode": "copy"
+    },
     "security-and-hardening": {
       "source": "addyosmani/agent-skills",
       "sourceType": "github",

@@ -1,0 +1,15 @@
+{
+  "name": "sdd-review",
+  "version": "1.0.0",
+  "description": "SDD Review skill - doubt-driven development review",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "keywords": ["sdd", "review", "doubt", "development"],
+  "license": "MIT"
+}

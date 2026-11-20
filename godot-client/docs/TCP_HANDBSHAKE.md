@@ -139,18 +139,10 @@ func _process(_delta: float) -> void:
 
 #### send_ticket() - Envío de Ticket
 
-**Formato esperado por el servidor:**
+**Formato esperado por el servidor (GameMessage directo, sin Any wrapper):**
 ```
 kqz {
-  f2 {           // Any wrapper
-    f1: "type.ankama.com/kqz"
-    f2: kqz_inner
-  }
-}
-
-kqz_inner {
-  f2: ticket
-  f3: language  // opcional
+  f1 { f2: ticket, f3: language }
 }
 ```
 

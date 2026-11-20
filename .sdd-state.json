@@ -1,0 +1,53 @@
+{
+  "version": "1.0.0",
+  "created_at": "2025-01-15T00:00:00Z",
+  "agents_md_checked": true,
+  "spec_updated": "2026-11-20",
+  "clarification": {
+    "status": "PASS",
+    "critical_count": 0,
+    "high_count": 0,
+    "report_path": "specs/001-login-flow/clarify-report.md",
+    "remediation_completed": true
+  },
+  "plan": {
+    "status": "generated",
+    "path": "specs/001-login-flow/plan.md"
+  },
+  "tasks": {
+    "status": "partially_completed",
+    "path": "specs/001-login-flow/tasks.md",
+    "total_tasks": 11,
+    "completed_tasks": 1,
+    "current_task": "T1"
+  },
+  "phase": "tasks",
+  "current_phase": "sdd-implement",
+  "active_task": "T1",
+  "next_allowed_phase": "sdd-implement",
+  "approved_phases": ["setup", "constitution", "backlog", "spec", "clarify", "plan", "tasks", "sdd-implement"],
+  "active_spec_dir": "specs/001-login-flow",
+  "gate_status": "approved",
+  "principles": {
+    "P-001": { "id": "P-001", "title": "Stack Estricto", "approved": true },
+    "P-002": { "id": "P-002", "title": "Testing Obligatorio con GUT", "approved": true },
+    "P-003": { "id": "P-003", "title": "Límites Arquitectónicos", "approved": true },
+    "P-004": { "id": "P-004", "title": "Calidad de Código", "approved": true },
+    "P-005": { "id": "P-005", "title": "Seguridad y Credenciales", "approved": true },
+    "P-006": { "id": "P-006", "title": "Convenciones de Desarrollo", "approved": true }
+  },
+  "implementation": {
+    "T1": {
+      "status": "completed",
+      "rf_covered": ["RF-1", "RF-2", "RF-10"],
+      "files_modified": [
+        "godot-client/src/Core/HttpClient.gd",
+        "godot-client/test/HttpClientTest.gd"
+      ],
+      "blast_radius": 2,
+      "lint_passed": true,
+      "no_hardcoded_credentials": true
+    }
+  },
+  "mode": "human-gated"
+}

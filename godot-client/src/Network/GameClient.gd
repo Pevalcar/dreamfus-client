@@ -222,17 +222,15 @@ func send_push(opcode: String, payload: PackedByteArray = PackedByteArray()) -> 
 
 ## Build and send kqz (present ticket).
 ## kqz is a client request presenting a ticket for authentication.
-## Protocol format (from GODOT_CLIENT_PROTOCOL.md):
+## Protocol format CORRECTO para kqz TCP (GameMessage directo):
 ##   Packet {
-##     InnerMessage {
-##       Any {
-##         type_url = "type.ankama.com/kqz",
-##         value = inner_kqz_message
-##       }
+##     InnerMessage {          // f1 = kqz opcode
+##       f2: ticket (string)   // Field 2 del inner message
+##       f3: language (string)  // Field 3 del inner message
 ##     }
 ##   }
-## The outer message uses field 2 for the inner message (not field 1 like requests)
-## Based on: Pb.New().Msg(2, any_msg).Build()
+## NOTA: NO se usa wrapper Any ni type_url. El opcode va en f1 del GameMessage.
+## Basado en: Spec 001 RF-6.1, RF-6.2, RF-6.3
 func send_ticket(ticket: String, language: String = "es") -> void:
 	if tcp == null or not _connected:
 		printerr("[GameClient] No conectado, no se puede enviar kqz")
@@ -240,23 +238,24 @@ func send_ticket(ticket: String, language: String = "es") -> void:
 
 	# Normalize ticket: trim whitespace and ensure lowercase
 	var normalized_ticket: String = ticket.strip_edges().to_lower()
+	
+	# Validate ticket format (RNF-4: /^[0-9a-f]{32}$/)
+	var regex := RegEx.new()
+	if regex.compile("^[0-9a-f]{32}$") != OK or not regex.search(normalized_ticket):
+		printerr("[GameClient] Ticket inválido (debe ser 32 chars hex): %s" % normalized_ticket)
+		return
 
-	# Build the inner kqz message: { f2: ticket, f3: language }
+	# Build the kqz inner message: { f2: ticket, f3: language }
+	# This is the direct GameMessage content (no Any wrapper)
 	var kqz_inner: PackedByteArray = PackedByteArray()
 	Proto.put_string(kqz_inner, 2, normalized_ticket) # f2 = ticket
 	if language != "":
-		Proto.put_string(kqz_inner, 3, language) # f3 = language (optional but per protocol)
+		Proto.put_string(kqz_inner, 3, language) # f3 = language
 
-	# Build the Any message: { f1: "type.ankama.com/kqz", f2: kqz_inner }
-	# Note: using "value" field name per protobuf Any spec, field 2 in our case
-	var any_msg: PackedByteArray = PackedByteArray()
-	Proto.put_string(any_msg, 1, "type.ankama.com/kqz") # f1 = type_url
-	Proto.put_bytes(any_msg, 2, kqz_inner) # f2 = inner kqz message (as value)
-
-	# Build the full packet: f1 { f1: Any } per protocol spec
-	# This matches the C#: Pb.New().Msg(1, any.Build()).Build()
+	# Build the full packet: f1 { f2: ticket, f3: language }
+	# This is GameMessage DIRECTO, without Any wrapper
 	var packet: PackedByteArray = PackedByteArray()
-	Proto.put_bytes(packet, 1, any_msg) # f1 = Any message (correct per protocol)
+	Proto.put_bytes(packet, 1, kqz_inner) # f1 = kqz inner message
 
 	# Add VarInt length prefix (Dofus wire format)
 	var framed: PackedByteArray = PackedByteArray()

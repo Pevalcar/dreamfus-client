@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://httpunitest"]
+
+[ext_resource type="Script" path="res://test/HttpClientTest.gd" id="1_test"]
+
+[node name="HttpTest" type="Node"]
+script = ExtResource("1_test")
