@@ -259,10 +259,10 @@ func _process_buffer() -> void:
 	var msg_type: String = payload.get("type", "unknown")
 
 	if msg_type == "auth_response":
-		var success := payload.get("success", false)
-		var error_msg := payload.get("error", "")
-		var account_id := payload.get("account_id", 0)
-		var servers := payload.get("servers", []) as Array
+		var success = payload.get("success") 
+		var error_msg = payload.get("error", "")
+		var account_id = payload.get("account_id", 0)
+		var servers = payload.get("servers", []) as Array
 		
 		if not success:
 			# RF-9: Manejo de rechazo de conexión inválida

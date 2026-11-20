@@ -71,7 +71,7 @@ var selected_server_id: int = 0
 var _pending_auth_token: String = ""
 var _pending_auth_lang: String = ""  # Must be set before use - prevents stale values
 var _pending_auth_install_id: String = ""
-
+var _current_auth_stage: String = ""  # Tracks current auth stage (e.g., "waiting_for_kvi")
 ## TCP connection attempt in progress
 var _tcp_connecting: bool = false
 
@@ -430,7 +430,7 @@ func _handle_kra_ack(payload: PackedByteArray) -> void:
 	# kra is an empty acknowledgment that the server accepted the kqz ticket
 	# This signals the start of the welcome burst sequence: kra → kvi → jtg
 	_current_auth_stage = "waiting_for_kvi"
-
+ 
 
 # Handle kvi (character list) message - part of welcome burst
 func _handle_kvi_messages(payload: PackedByteArray) -> void:
