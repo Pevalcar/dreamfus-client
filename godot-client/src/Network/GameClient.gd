@@ -245,17 +245,13 @@ func send_ticket(ticket: String, language: String = "es") -> void:
 		printerr("[GameClient] Ticket inválido (debe ser 32 chars hex): %s" % normalized_ticket)
 		return
 
-	# Build the kqz inner message: { f2: ticket, f3: language }
-	# This is the direct GameMessage content (no Any wrapper)
-	var kqz_inner: PackedByteArray = PackedByteArray()
-	Proto.put_string(kqz_inner, 2, normalized_ticket) # f2 = ticket
-	if language != "":
-		Proto.put_string(kqz_inner, 3, language) # f3 = language
-
-	# Build the full packet: f1 { f2: ticket, f3: language }
-	# This is GameMessage DIRECTO, without Any wrapper
-	var packet: PackedByteArray = PackedByteArray()
-	Proto.put_bytes(packet, 1, kqz_inner) # f1 = kqz inner message
+	# Use Proto.build_kqz_message for correct protobuf structure
+	# Format: f1 { f2: ticket, f3: language } - GameMessage directo
+	var packet: PackedByteArray = Proto.build_kqz_message(normalized_ticket, language)
+	
+	if packet.is_empty():
+		printerr("[GameClient] Error construyendo mensaje kqz")
+		return
 
 	# Add VarInt length prefix (Dofus wire format)
 	var framed: PackedByteArray = PackedByteArray()
