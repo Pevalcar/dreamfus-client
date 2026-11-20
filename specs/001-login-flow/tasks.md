@@ -203,6 +203,11 @@
 - **Godot 4.8**: No instalado - tests no se pueden ejecutar actualmente
 - **Credenciales prueba**: `keka` / `test`, AccountId `188940901`, ServerId `290`
 
+**Estado commit actual (73f10c1):**
+- Style fixes en GameClient.gd (usar `Proto.build_kqz_message()`)
+- Style fixes en GameManager.gd (agregado `_current_auth_stage`)
+- Style fixes en SimpleProtocolClient.gd (tipos explícitos)
+
 ---
 
 ## Estado Final
@@ -213,9 +218,10 @@
 |-------|-------|-------|-------|-------|-------|
 | Stack estricto Godot 4.8 ✅ | Tests creados (391) - no ejecutables sin Godot ✅ | 2 viaciones preexistentes (Proto.gd, GameManager.gd) ✅ | Sin warnings verificados (Godot no disponible) ✅ | Sin hardcoded credentials ✅ | Convenciones seguidas ✅ |
 
-### Total de Tests Creados: 391 tests en 11 archivos de test
+### Total de Tests Creados: 391 tests en 13 archivos de test
+(HttpClientTest, BurstProcessingTest, WalkingSkeletonTest, ErrorHandlingTest, TcpKqzTest, InvalidTokenTest, WebSocketClientTest, TicketValidationTest, AuthErrorTest, ServerSelectionTest, test_character_selection, test_basic_e2e, test_kqz_burst_e2e)
 
-### Archivos Creados (7):
+### Archivos Creados (9):
 - `godot-client/src/Core/AuthManager.gd`
 - `godot-client/src/Data/AuthError.gd`
 - `godot-client/src/Core/AuthErrorManager.gd`
@@ -223,12 +229,14 @@
 - `godot-client/test/WalkingSkeletonTest.gd`
 - `godot-client/test/ErrorHandlingTest.gd`
 - `godot-client/test/InvalidTokenTest.gd`
+- `godot-client/test/TcpKqzTest.gd`
+- `godot-client/test/TicketValidationTest.gd`
 
 ### Archivos Modificados (4):
-- `godot-client/src/Network/Proto.gd`
-- `godot-client/src/Network/GameClient.gd`
-- `godot-client/src/Network/SimpleProtocolClient.gd`
-- `godot-client/src/Core/GameManager.gd`
+- `godot-client/src/Network/Proto.gd` - agregado `build_kqz_message()` y `validate_ticket()`
+- `godot-client/src/Network/GameClient.gd` - corregido `send_ticket()` para usar `Proto.build_kqz_message()`
+- `godot-client/src/Network/SimpleProtocolClient.gd` - manejo de errores RF-9, tipos explícitos
+- `godot-client/src/Core/GameManager.gd` - agregado `_current_auth_stage`, handlers kra/kvi/jtg
 
 ---
 
