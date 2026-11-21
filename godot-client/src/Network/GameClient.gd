@@ -224,11 +224,11 @@ func send_push(opcode: String, payload: PackedByteArray = PackedByteArray()) -> 
 ## kqz es un request con formato especial que requiere wrapper Any y uid
 ## 
 ## Formato CORRECTO para kqz TCP:
-##   hea {                          // wrapper envelope
-##     f1: Any {                    // campo 1 del sobre
-##       f1: "type.ankama.com/kqz"  // type_url del Any
-##       f2: GameMessage {          // payload serializado del Any
-##         f1: AuthenticationMessage {
+##   root {                           // outer envelope with field 2 as root
+##     f2: hea {                      // wrapper envelope
+##       f1: Any {                    // campo 1 del sobre
+##         f1: "type.ankama.com/kqz"  // type_url del Any
+##         f2: AuthenticationMessage {  // payload = AuthenticationMessage directamente (sin GameMessage wrapper)
 ##           f2: ticket (string)
 ##           f3: language (string)
 ##         }
@@ -237,7 +237,7 @@ func send_push(opcode: String, payload: PackedByteArray = PackedByteArray()) -> 
 ##   }
 ## NOTA: El server rechaza GameMessage directo sin Any wrapper.
 ## El framing con VarInt prefix se agrega en send_ticket().
-## Basado en: Spec 001 RF-6.1, RF-6.2, RF-6.3
+## Basado en: Spec 001 RF-6.1, RF-6.2, RF-6.3, TCP_HANDBSHAKE.md línea 447
 func send_ticket(ticket: String, language: String = "es") -> void:
 	if tcp == null or not _connected:
 		printerr("[GameClient] No conectado, no se puede enviar kqz")
@@ -247,8 +247,8 @@ func send_ticket(ticket: String, language: String = "es") -> void:
 	var normalized_ticket: String = ticket.strip_edges().to_lower()
 	
 	# Use Proto.build_kqz_message for correct protobuf structure
-	# Format: hea { f1: Any { f1: "type.ankama.com/kqz", f2: inner }, f2: uid }
-	# where inner = GameMessage { f1: AuthenticationMessage { f2: ticket, f3: language } }
+	# Format: root { f2: hea { f1: Any { f1: "type.ankama.com/kqz", f2: auth_msg }, f2: uid } }
+	# where auth_msg = AuthenticationMessage { f2: ticket, f3: language } (sin GameMessage wrapper)
 	var packet: PackedByteArray = Proto.build_kqz_message(normalized_ticket, language)
 	
 	if packet.is_empty():

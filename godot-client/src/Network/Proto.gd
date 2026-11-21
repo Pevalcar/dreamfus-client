@@ -348,12 +348,12 @@ static func decode(frame: PackedByteArray) -> Dictionary:
 	if outer_fields.is_empty():
 		return result
 	
-	var root_field := outer_fields[0]
+	var root_field = outer_fields[0]
 	var root_num := int(root_field.get("n", 0))
 	result["root"] = root_num
 	
 	# Parse the inner wrapper from the root field's bytes
-	var wrapper_bytes := root_field.get("b", PackedByteArray())
+	var wrapper_bytes = root_field.get("b", PackedByteArray())
 	if wrapper_bytes.is_empty():
 		return result
 	
@@ -362,17 +362,17 @@ static func decode(frame: PackedByteArray) -> Dictionary:
 		return result
 	
 	# Find the Any wrapper in the inner envelope
-	var any_field := first(wrapper_fields, 1)
+	var any_field= first(wrapper_fields, 1)
 	if any_field == null or not any_field.has("b"):
 		return result
 	
-	var any_bytes := any_field.b
+	var any_bytes = any_field.b
 	var any_fields := parse(any_bytes)
 	if any_fields.is_empty():
 		return result
 	
 	# Extract type_url from Any.f1
-	var type_url_field := first(any_fields, 1)
+	var type_url_field = first(any_fields, 1)
 	if type_url_field == null or not type_url_field.has("b"):
 		return result
 	
@@ -400,7 +400,7 @@ static func decode(frame: PackedByteArray) -> Dictionary:
 	# For client REQUESTs (root=2) and server ANSWERs (root=3), find the request_id in inner f2
 	# This is the id that the client should echo back in responses
 	if root_num == 2 or root_num == 3:
-		var id_field := first(wrapper_fields, 2)
+		var id_field = first(wrapper_fields, 2)
 		if id_field != null and id_field.has("v"):
 			result["id"] = id_field["v"]
 
@@ -962,26 +962,25 @@ static func validate_ticket(ticket: Variant) -> Dictionary:
 
 
 ## Construye GameMessage kqz para envío al servidor GameNode
-## El servidor espera un wrapper Any con type_url + uid, NO GameMessage directo
+## El servidor espera un wrapper Any con type_url + AuthenticationMessage (sin GameMessage wrapper)
 ## 
 ## Formato CORRECTO para kqz TCP (per especificación):
 ##   root {                           // outer envelope with field 2 as root
 ##     f2: hea {                      // inner envelope (wrapper)
 ##       f1: Any {                   // campo 1 del sobre
 ##         f1: "type.ankama.com/kqz"  // type_url del Any
-##         f2: GameMessage {          // payload serializado del Any
-##           f1: AuthenticationMessage {
-##             f2: ticket (string)
-##             f3: language (string)
-##           }
+##         f2: AuthenticationMessage {  // payload = AuthenticationMessage directamente (sin GameMessage wrapper)
+##           f2: ticket (string)
+##           f3: language (string)
 ##         }
 ##       }
 ##     f2: -1                       // uid como varint en campo 2 del sobre
 ##   }
 ##
-## NOTA: El server rechaza GameMessage directo sin wrapper. 
+## NOTA: El server rechaza GameMessage directo sin Any wrapper.
 ## El framing con VarInt prefix se agrega en send_ticket().
 ## Basado en: Spec 001 RF-6.1, RF-6.2, RF-6.3, y docs/PROTOCOLO/01-TRANSPORTE.md líneas 85-99
+## Ver también TCP_HANDBSHAKE.md línea 447: "kqz | f2: ticket (string)"
 ##
 ## Args:
 ##     ticket: String - 32 caracteres hexadecimales (se valida y normaliza)
@@ -990,10 +989,24 @@ static func validate_ticket(ticket: Variant) -> Dictionary:
 ## Returns:
 ##     PackedByteArray - kqz message with outer envelope (f2 as root), o PackedByteArray vacío si ticket inválido
 static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
-	"""Construye kqz con wrapper Any y uid.
+	"""Construye kqz con wrapper Any y AuthenticationMessage directo.
 	
-	El servidor espera: root { f2: hea { f1: Any, f2: -1 } }
-	donde hea { f1: "type.ankama.com/kqz", f2: GameMessage }
+	El servidor espera: root { f2: hea { f1: Any, f2: AuthenticationMessage } }
+	donde AuthenticationMessage = { f2: ticket, f3: language }
+	
+	Formato final:
+	  root {                           // outer envelope with field 2 as root
+	    f2: hea {                      // inner envelope (wrapper)
+	      f1: Any {                   // campo 1 del sobre
+	        f1: "type.ankama.com/kqz"  // type_url del Any
+	        f2: AuthenticationMessage {  // payload = AuthenticationMessage directamente (sin GameMessage wrapper)
+	          f2: ticket (string)
+	          f3: language (string)
+	        }
+	      }
+	      f2: -1                       // uid como varint en campo 2 del sobre
+	    }
+	  }
 	
 	Args:
 		ticket: 32 caracteres hexadecimales (se valida automáticamente)
@@ -1010,24 +1023,21 @@ static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
 	
 	var normalized_ticket = validation["normalized"]
 	
-	# Paso 1: Construir AuthenticationMessage (inner message)
-	# Formato: f2: ticket, f3: language
+	# Paso 1: Construir AuthenticationMessage directamente como payload
+	# Per spec (TCP_HANDBSHAKE.md línea 447): payload = "f2: ticket (string)"
+	# El AuthenticationMessage se usa directamente, NO hay GameMessage wrapper
 	var auth_msg := PackedByteArray()
 	put_string(auth_msg, 2, normalized_ticket)
 	put_string(auth_msg, 3, lang)
 	
-	# Paso 2: Construir GameMessage con el inner message
-	# f1 = AuthenticationMessage
-	var game_msg := PackedByteArray()
-	put_bytes(game_msg, 1, auth_msg)
-	
-	# Paso 3: Construir Any wrapper { f1: type_url, f2: payload }
+	# Paso 2: Construir Any wrapper { f1: type_url, f2: payload }
+	# El payload es AuthenticationMessage directamente
 	var type_url := "type.ankama.com/kqz"
 	var any_msg := PackedByteArray()
 	put_string(any_msg, 1, type_url)  # f1 = type_url
-	put_bytes(any_msg, 2, game_msg)   # f2 = payload
+	put_bytes(any_msg, 2, auth_msg)   # f2 = AuthenticationMessage (sin GameMessage wrapper)
 	
-	# Paso 4: Construir el sobre hea { f1: Any, f2: -1 }
+	# Paso 3: Construir el sobre hea { f1: Any, f2: -1 }
 	# NOTA: El order de los campos no afecta la serialización protobuf
 	# Los campos se ordenan por número de campo al serializar
 	var hea_envelope := PackedByteArray()
@@ -1040,4 +1050,3 @@ static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
 	put_bytes(root, 2, hea_envelope)
 	
 	return root
-}

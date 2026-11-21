@@ -148,11 +148,9 @@ root {                           // outer envelope with field 2 as root
   f2: hea {                      // inner envelope (wrapper)
     f1: Any {                   // Any wrapper
       f1: "type.ankama.com/kqz"  // type_url del Any
-      f2: GameMessage {          // payload serializado del Any
-        f1: AuthenticationMessage {
-          f2: ticket (string)
-          f3: language (string)
-        }
+      f2: AuthenticationMessage {  // payload = AuthenticationMessage directamente (sin GameMessage wrapper)
+        f2: ticket (string)
+        f3: language (string)
       }
     }
     f2: -1                       // uid como varint en campo 2 del sobre
@@ -254,14 +252,17 @@ root {                           // outer envelope with field 2 as root
   f2: hea {                      // inner envelope (wrapper)
     f1: Any {                   // Any wrapper
       f1: "type.ankama.com/opcode"  // type_url del Any
-      f2: GameMessage {          // payload serializado del Any
-        f1: inner_message       // depends on opcode
+      f2: AuthenticationMessage {  // payload = AuthenticationMessage directamente (sin GameMessage wrapper)
+        f2: ticket (string)
+        f3: language (string)
       }
     }
     f2: request_id              // -1 para nuevos requests
   }
 }
 ```
+
+Para kqz específicamente, el payload es `AuthenticationMessage { f2: ticket, f3: language }` sin GameMessage wrapper adicional.
 
 **SERVER PUSH (lqu, hoy, kvi, jtg):**
 ```

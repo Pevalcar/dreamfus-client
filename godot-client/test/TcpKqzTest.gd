@@ -21,11 +21,9 @@ func test_kqz_format_boxed_message() ->void:
 	#   f2: hea {              // inner envelope
 	#     f1: Any {            // Wrapper
 	#       f1: "type.ankama.com/kqz"       // type_url del Any
-	#       f2: GameMessage {                // payload del Any
-	#         f1: AuthenticationMessage {
-	#           f2: ticket (string)
-	#           f3: language (string)
-	#         }
+	#       f2: AuthenticationMessage {     // payload = AuthenticationMessage directamente (sin GameMessage wrapper)
+	#         f2: ticket (string)
+	#         f3: language (string)
 	#       }
 	#     }
 	#     f2: -1               // uid como varint en campo 2 del sobre
@@ -77,19 +75,13 @@ func test_kqz_format_boxed_message() ->void:
 		var type_url := type_url_field.b.get_string_from_utf8()
 		assert_eq(type_url, "type.ankama.com/kqz", "type_url debe ser 'type.ankama.com/kqz'")
 		
-		# Verificar que Any.f2 contiene el GameMessage
+		# Verificar que Any.f2 contiene directamente AuthenticationMessage (sin GameMessage wrapper)
 		var payload_field := Proto.first(any_fields, 2)
 		assert_not_null(payload_field, "Any debe tener campo f2 (payload)")
-		assert_true(payload_field.has("b"), "payload debe ser bytes (GameMessage)")
-		
-		# Verificar GameMessage.f1 = AuthenticationMessage
-		var game_fields := Proto.parse(payload_field.b)
-		var inner_field := Proto.first(game_fields, 1)
-		assert_not_null(inner_field, "GameMessage debe tener campo f1")
-		assert_true(inner_field.has("b"), "f1 debe ser bytes (AuthenticationMessage)")
+		assert_true(payload_field.has("b"), "payload debe ser bytes (AuthenticationMessage)")
 		
 		# Verificar AuthenticationMessage.f2 = ticket, f3 = language
-		var auth_fields := Proto.parse(inner_field.b)
+		var auth_fields := Proto.parse(payload_field.b)
 		var ticket_field := Proto.first(auth_fields, 2)
 		assert_not_null(ticket_field, "AuthenticationMessage debe tener campo f2 (ticket)")
 		assert_true(ticket_field.has("b"), "ticket debe ser bytes string")
@@ -112,7 +104,7 @@ func test_kqz_inner_message_structure() ->void:
 		"inner_f1": "Any_wrapper",     # hea.f1 = Any
 		"inner_f2": "uid_minus_one",   # hea.f2 = -1 (uid)
 		"Any_f1": "type_url",          # Any.f1 = "type.ankama.com/kqz"
-		"Any_f2": "inner_message"      # Any.f2 = GameMessage
+		"Any_f2": "auth_msg"           # Any.f2 = AuthenticationMessage (sin GameMessage wrapper)
 	}
 	
 	assert_eq(expected_structure.size(), 5, "Debe tener outer_f2, inner_f1, inner_f2, Any_f1, Any_f2")
@@ -221,7 +213,7 @@ func test_kwz_framing_varint_prefix()->void:
 	"""T6: kqz usa VarInt framing con longitud como prefijo"""
 	# Formato: [VarInt length][hea envelope]
 	# Donde hea envelope = root { f2: hea } con hea = { f1: Any, f2: -1 }
-	# y Any = { f1: type_url, f2: GameMessage }
+	# y Any = { f1: type_url, f2: AuthenticationMessage } (sin GameMessage wrapper)
 	
 	# El Proto.write_varint() escribe el largo del payload
 	# Esto es necesario para el protocolo Dofus
@@ -262,14 +254,15 @@ func test_push_uses_f1_as_root()->void:
 func test_build_kqz_message_structure()->void:
 	"""T6-RF6.1: build_kqz_message construye root { f2: hea } donde hea = { f1: Any, f2: -1 }"""
 	# El formato esperado es el envelope COMPLETO con outer envelope:
-	# root { f2: hea { f1: Any { f1: "type.ankama.com/kqz", f2: inner }, f2: uid } }
+	# root { f2: hea { f1: Any { f1: "type.ankama.com/kqz", f2: auth_msg }, f2: uid } }
+	# donde auth_msg = AuthenticationMessage { f2: ticket, f3: language } (sin GameMessage wrapper)
 	
 	var expected_structure := {
 		"outer_f2": "hea_envelope",   # root.f2 = inner envelope
 		"inner_f1": "Any_wrapper",     # hea.f1 = Any
 		"inner_f2": "uid_minus_one",   # hea.f2 = -1
 		"Any_f1": "type_url",          # Any.f1 = "type.ankama.com/kqz"
-		"Any_f2": "inner_message"      # Any.f2 = GameMessage
+		"Any_f2": "auth_msg"           # Any.f2 = AuthenticationMessage (sin GameMessage wrapper)
 	}
 	
 	assert_eq(expected_structure.size(), 5, "Estructura esperada verificada")
@@ -321,8 +314,8 @@ func test_ticket_validation_edge_cases()->void:
 func test_proto_build_kqz_message_helper()->void:
 	"""T6: Proto.build_kqz_message() crea envelope completo con Any wrapper"""
 	# El método debe construir:
-	# hea { f1: Any { f1: "type.ankama.com/kqz", f2: inner }, f2: -1 }
-	# donde inner = GameMessage { f1: AuthenticationMessage { f2: ticket, f3: language } }
+	# root { f2: hea { f1: Any { f1: "type.ankama.com/kqz", f2: auth_msg }, f2: uid } }
+	# donde auth_msg = AuthenticationMessage { f2: ticket, f3: language } (sin GameMessage wrapper)
 	
 	assert_true(Proto.has_method("build_kqz_message"), "Proto.tiene build_kqz_message")
 
