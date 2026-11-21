@@ -910,27 +910,43 @@ static func validate_ticket(ticket: Variant) -> Dictionary:
 	return { "valid": true, "normalized": normalized }
 
 
-## Construye GameMessage kqz para envío directo al servidor GameNode
-## RF-6.1, RF-6.2, RF-6.3: f1=mensaje interno, f2=ticket, f3=language
+## Construye GameMessage kqz para envío al servidor GameNode
+## El servidor espera un wrapper Any con type_url + uid, NO GameMessage directo
+## 
+## Formato CORRECTO para kqz TCP:
+##   hea {                          // wrapper envelope
+##     f1: Any {                    // campo 1 del sobre
+##       f1: "type.ankama.com/kqz"  // type_url del Any
+##       f2: GameMessage {          // payload serializado del Any
+##         f1: AuthenticationMessage {
+##           f2: ticket (string)
+##           f3: language (string)
+##         }
+##       }
+##     f2: -1                      // uid como varint en campo 2 del sobre
+##   }
+##
+## NOTA: El server rechaza GameMessage directo sin wrapper. 
+## El byte example original dice length=61 pero el payload real es ~43 bytes.
 ##
 ## Args:
 ##     ticket: String - 32 caracteres hexadecimales (se valida y normaliza)
 ##     lang: String - Código ISO 639-1 (ej: "es", "en")
 ##
 ## Returns:
-##     PackedByteArray - GameMessage listo para envío, o null si el ticket es inválido
+##     PackedByteArray - hea envelope listo para envío, o PackedByteArray vacío si ticket inválido
 static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
-	"""Construye GameMessage kqz directo (sin wrapper Any) según RF-6.1, 6.3.
+	"""Construye kqz con wrapper Any y uid.
 	
-	El formato es: f1 { f2: ticket, f3: language }
-	Esto evita el wrapper Any según RF-6.1
+	El servidor espera: hea { f1: Any, f2: -1 }
+	donde Any { f1: "type.ankama.com/kqz", f2: GameMessage }
 	
 	Args:
 		ticket: 32 caracteres hexadecimales (se valida automáticamente)
 		lang: código ISO 639-1
 	
 	Returns:
-		GameMessage como PackedByteArray, o null si ticket inválido
+		PackedByteArray - hea envelope, o PackedByteArray vacío si ticket inválido
 	"""
 	# Validar ticket primero (RF-6.2)
 	var validation = validate_ticket(ticket)
@@ -940,17 +956,27 @@ static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
 	
 	var normalized_ticket = validation["normalized"]
 	
-	# Construir el mensaje interno f1 { f2: ticket, f3: language }
-	var inner_message := PackedByteArray()
+	# Paso 1: Construir AuthenticationMessage (inner message)
+	# Formato: f2: ticket, f3: language
+	var auth_msg := PackedByteArray()
+	put_string(auth_msg, 2, normalized_ticket)
+	put_string(auth_msg, 3, lang)
 	
-	# Campo 2 (f2): ticket como string length-delimited
-	put_string(inner_message, 2, normalized_ticket)
+	# Paso 2: Construir GameMessage con el inner message
+	# f1 = AuthenticationMessage
+	var game_msg := PackedByteArray()
+	put_bytes(game_msg, 1, auth_msg)
 	
-	# Campo 3 (f3): language como string length-delimited
-	put_string(inner_message, 3, lang)
+	# Paso 3: Construir Any wrapper { f1: type_url, f2: payload }
+	var type_url := "type.ankama.com/kqz"
+	var any_msg := PackedByteArray()
+	put_string(any_msg, 1, type_url)  # f1 = type_url
+	put_bytes(any_msg, 2, game_msg)   # f2 = payload
 	
-	# Envolver en f1: el mensaje interno completo
-	var result := PackedByteArray()
-	put_bytes(result, 1, inner_message)
+	# Paso 4: Construir el sobre hea { f1: Any, f2: uid }
+	var envelope := PackedByteArray()
+	put_bytes(envelope, 1, any_msg)   # f1 = Any wrapper
+	put_varint(envelope, 2, -1)       # f2 = uid = -1 (no correlation)
 	
-	return result
+	return envelope
+}

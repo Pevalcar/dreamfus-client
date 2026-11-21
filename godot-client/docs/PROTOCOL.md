@@ -197,14 +197,28 @@ Cliente → Servidor: kvw (character selection, triggered by jtg)
 
 El cliente envía el ticket para autenticarse con el servidor de juego:
 
-**Estructura protobuf (GameMessage directo, sin Any wrapper):**
+**Estructura protobuf (con envelope wrapper Any):**
 ```
-f1 { f2: ticket, f3: language }
+hea {                                    // wrapper envelope
+  f1: Any {                              // campo 1 del sobre
+    f1: "type.ankama.com/kqz"           // type_url del Any
+    f2: GameMessage {                   // payload del Any
+      f1: AuthenticationMessage {
+        f2: ticket (string)
+        f3: language (string)
+      }
+    }
+  }
+  f2: -1                                 // uid como varint en campo 2
+}
 ```
 
+**NOTA IMPORTANTE:** El servidor **requiere** el envelope wrapper Any con type_url y uid. El envío de GameMessage directo (sin wrapper) causa error: "input ended unexpectedly in the middle of a field".
+
 **Implementación en Godot:**
-- Usa `GameClient.send_ticket(ticket, language)`
+- Usa `GameClient.send_ticket(ticket, language)` que internamente llama a `Proto.build_kqz_message()`
 - Lenguaje opcional (por defecto "es")
+- El framing con VarInt length prefix se agrega automáticamente antes del envío
 
 ### Formato de Mensaje kvi (Character List)
 

@@ -221,32 +221,34 @@ func send_push(opcode: String, payload: PackedByteArray = PackedByteArray()) -> 
 
 
 ## Build and send kqz (present ticket).
-## kqz is a client request presenting a ticket for authentication.
-## Protocol format CORRECTO para kqz TCP (GameMessage directo):
-##   Packet {
-##     InnerMessage {          // f1 = kqz opcode
-##       f2: ticket (string)   // Field 2 del inner message
-##       f3: language (string)  // Field 3 del inner message
-##     }
+## kqz es un request con formato especial que requiere wrapper Any y uid
+## 
+## Formato CORRECTO para kqz TCP:
+##   hea {                          // wrapper envelope
+##     f1: Any {                    // campo 1 del sobre
+##       f1: "type.ankama.com/kqz"  // type_url del Any
+##       f2: GameMessage {          // payload serializado del Any
+##         f1: AuthenticationMessage {
+##           f2: ticket (string)
+##           f3: language (string)
+##         }
+##       }
+##     f2: -1                      // uid como varint en campo 2 del sobre
 ##   }
-## NOTA: NO se usa wrapper Any ni type_url. El opcode va en f1 del GameMessage.
+## NOTA: El server rechaza GameMessage directo sin Any wrapper.
+## El framing con VarInt prefix se agrega en send_ticket().
 ## Basado en: Spec 001 RF-6.1, RF-6.2, RF-6.3
 func send_ticket(ticket: String, language: String = "es") -> void:
 	if tcp == null or not _connected:
 		printerr("[GameClient] No conectado, no se puede enviar kqz")
 		return
 
-	# Normalize ticket: trim whitespace and ensure lowercase
+	# Normalizar ticket: trim whitespace and ensure lowercase
 	var normalized_ticket: String = ticket.strip_edges().to_lower()
 	
-	# Validate ticket format (RNF-4: /^[0-9a-f]{32}$/)
-	var regex := RegEx.new()
-	if regex.compile("^[0-9a-f]{32}$") != OK or not regex.search(normalized_ticket):
-		printerr("[GameClient] Ticket inválido (debe ser 32 chars hex): %s" % normalized_ticket)
-		return
-
 	# Use Proto.build_kqz_message for correct protobuf structure
-	# Format: f1 { f2: ticket, f3: language } - GameMessage directo
+	# Format: hea { f1: Any { f1: "type.ankama.com/kqz", f2: inner }, f2: uid }
+	# where inner = GameMessage { f1: AuthenticationMessage { f2: ticket, f3: language } }
 	var packet: PackedByteArray = Proto.build_kqz_message(normalized_ticket, language)
 	
 	if packet.is_empty():
