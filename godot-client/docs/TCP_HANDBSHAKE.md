@@ -139,12 +139,30 @@ func _process(_delta: float) -> void:
 
 #### send_ticket() - Envío de Ticket
 
-**Formato esperado por el servidor (GameMessage directo, sin Any wrapper):**
+**Formato CORRECTO esperado por el servidor (con Any wrapper y outer envelope):**
+
+Según especificación (docs/PROTOCOLO/01-TRANSPORTE.md líneas 85-99):
+
 ```
-kqz {
-  f1 { f2: ticket, f3: language }
+root {                           // outer envelope with field 2 as root
+  f2: hea {                      // inner envelope (wrapper)
+    f1: Any {                   // Any wrapper
+      f1: "type.ankama.com/kqz"  // type_url del Any
+      f2: GameMessage {          // payload serializado del Any
+        f1: AuthenticationMessage {
+          f2: ticket (string)
+          f3: language (string)
+        }
+      }
+    }
+    f2: -1                       // uid como varint en campo 2 del sobre
+  }
 }
 ```
+
+**NOTA CRÍTICA:** El servidor rechaza `GameMessage` directo sin el `Any` wrapper.
+El servidor también requiere el envelope externo `{ f2: ... }` con `f2` como raíz
+para los mensajes de solicitud del cliente.
 
 ### 3. GameManager.gd - Orquestador
 
@@ -228,28 +246,49 @@ El VarInt usa codificación estándar de protobuf:
 - Bit 7 como flag de continuación
 - Números negativos usan 10 bytes (complemento a dos)
 
-### Envelope Structure
+### Envelope Structure (CORRECTO según spec 001)
 
 **CLIENT REQUEST (kqz, kvw):**
 ```
-f2 {               // Root = 2 (request)
-  f1: Any {        // Wrapper
-    f1: "type.ankama.com/opcode"
-    f2: payload
+root {                           // outer envelope with field 2 as root
+  f2: hea {                      // inner envelope (wrapper)
+    f1: Any {                   // Any wrapper
+      f1: "type.ankama.com/opcode"  // type_url del Any
+      f2: GameMessage {          // payload serializado del Any
+        f1: inner_message       // depends on opcode
+      }
+    }
+    f2: request_id              // -1 para nuevos requests
   }
-  f2: request_id  // -1 para nuevos
 }
 ```
 
 **SERVER PUSH (lqu, hoy, kvi, jtg):**
 ```
-f1 {               // Root = 1 (push)
-  f1: Any {        // Wrapper
+root {                           // outer envelope with field 1 as root (push)
+  f1: Any {                     // Any wrapper
     f1: "type.ankama.com/opcode"
     f2: payload
   }
 }
 ```
+
+**SERVER ANSWER:**
+```
+root {                           // outer envelope with field 3 as root
+  f3: Any {                     // Any wrapper
+    f1: "type.ankama.com/opcode"
+    f2: response_payload
+  }
+  f1: request_id                // echo of the request id
+}
+```
+
+### VarInt Encoding for -1
+
+Per specification (docs/PROTOCOLO/01-TRANSPORTE.md lines 82-83):
+- `-1` ocupa 10 bytes en complemento a dos: `FF FF FF FF FF FF FF FF FF 01`
+- NOTA: No usar zigzag encoding para números negativos
 
 ## Debugging
 

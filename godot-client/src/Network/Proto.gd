@@ -16,19 +16,24 @@ const WIRE_FIXED32 = 5
 
 ## Write a VarInt (unsigned) to the end of `buf`.
 ## Correctly implements protobuf VarInt encoding: 7 bits per byte, LSB first.
+## For negative numbers, uses 64-bit two's complement (10 bytes for -1 = FF*8 + 01).
+## Reference: docs/PROTOCOLO/01-TRANSPORTE.md lines 82-83, 212-213
 static func write_varint(buf: PackedByteArray, value: int) -> void:
-	# Handle negative numbers by treating them as unsigned (zig-zag would be different)
+	# Handle negative numbers using 64-bit two's complement
+	# Per spec: -1 occupies 10 bytes (FF FF FF FF FF FF FF FF FF 01)
 	var v: int = value
-	# For VarInt, we encode the raw bits - Godot handles int as signed
-	# This works for positive values; for negative, we need to handle carefully
 	if v < 0:
-		# Para valores negativos, codificamos usando complemento a 2
-		# El valor 0xFFFFFFFFFFFFFFFF no cabe en int64 de Godot, así que usamos una aproximación
-		v = int(v & 0xFFFFFFFFFFFFFFFF)  # Máscara para valores negativos
-	else:
-		v = int(v) & 0xFFFFFFFFFFFFFFFF  # Asegurar positivo
+		# Encode as unsigned 64-bit two's complement
+		# Godot 4.8 requires iterating byte by byte for negative numbers
+		# -1 = 0xFFFFFFFFFFFFFFFF, encode as 10 bytes
+		for i in range(9):
+			buf.append(0xFF)  # All 9 bytes set to 1
+		buf.append(0x01)     # Last byte is 01
+		return
+	
+	# Encode as standard varint (7 bits per byte, continuation in bit 7)
+	# For positive values
 	while v > 0x7F:
-		# Write 7 bits with continuation flag
 		buf.append((v & 0x7F) | 0x80)
 		v >>= 7
 	buf.append(v & 0x7F)
@@ -191,21 +196,28 @@ static func decode_message(ba: PackedByteArray) -> Dictionary:
 	return result
 
 
-## Build a request envelope: { f1: Any { f1: opcode_url, f2: payload }, f2: request_id }
+## Build a request envelope: { f2: { f1: Any { f1: opcode_url, f2: payload }, f2: request_id } }
+## Per specification: root field 2 for client -> server requests (docs/PROTOCOLO/01-TRANSPORTE.md lines 85-99)
 static func request(
 	opcode: String,
 	payload: PackedByteArray = PackedByteArray(),
+	request_id: int = -1,
 ) -> PackedByteArray:
 	var type_url := "type.ankama.com/%s" % opcode
 	var any_msg := PackedByteArray()
 	put_string(any_msg, 1, type_url)
 	put_bytes(any_msg, 2, payload)
 
-	var envelope := PackedByteArray()
-	put_bytes(envelope, 1, any_msg)
-	put_varint(envelope, 2, -1) # request_id = -1 for client requests
+	# Build inner envelope: { f1: Any, f2: request_id }
+	var inner := PackedByteArray()
+	put_bytes(inner, 1, any_msg)
+	put_varint(inner, 2, request_id)
 
-	return envelope
+	# Build outer envelope with field 2 as root (for client requests)
+	var root := PackedByteArray()
+	put_bytes(root, 2, inner)
+
+	return root
 
 
 ## Build a push envelope (server message): { f1: Any { f1: opcode_url, f2: payload } }
@@ -318,40 +330,79 @@ const TYPE_URL_PREFIX := "type.ankama.com/"
 
 ## Decode a complete frame into a dictionary with opcode, payload, and request_id.
 ##
-## The frame is scanned for the type_url instead of walking field numbers. The server
-## wraps pushes as f1 { f1 { f1: url, f2: payload } } (ConnectionProtocol.Push) while
-## client requests go in a single level under another root field, so the nesting depth
-## is not something to hardcode. NetworkMessage.ReadPayload scans for the same marker.
+## Frame format varies by direction:
+## - Client REQUEST: root { 2 { f1: Any, f2: id } }           - id in inner f2
+## - Server PUSH: root { 1 { f1: Any } }                    - no id
+## - Server ANSWER: root { 3 { f1: Any, f2: id } }          - id in inner f2
+##
+## The frame is scanned for the type_url instead of walking field numbers first.
+## NetworkMessage.ReadPayload scans for the same marker.
 static func decode(frame: PackedByteArray) -> Dictionary:
-	var result: Dictionary = { "opcode": "", "payload": PackedByteArray(), "id": 0 }
+	var result: Dictionary = { "opcode": "", "payload": PackedByteArray(), "id": 0, "root": 0 }
 
 	if frame == null or frame.size() == 0:
 		return result
 
+	# Find the outer envelope field number (1, 2, or 3)
+	var outer_fields := parse(frame)
+	if outer_fields.is_empty():
+		return result
+	
+	var root_field := outer_fields[0]
+	var root_num := int(root_field.get("n", 0))
+	result["root"] = root_num
+	
+	# Parse the inner wrapper from the root field's bytes
+	var wrapper_bytes := root_field.get("b", PackedByteArray())
+	if wrapper_bytes.is_empty():
+		return result
+	
+	var wrapper_fields := parse(wrapper_bytes)
+	if wrapper_fields.is_empty():
+		return result
+	
+	# Find the Any wrapper in the inner envelope
+	var any_field := first(wrapper_fields, 1)
+	if any_field == null or not any_field.has("b"):
+		return result
+	
+	var any_bytes := any_field.b
+	var any_fields := parse(any_bytes)
+	if any_fields.is_empty():
+		return result
+	
+	# Extract type_url from Any.f1
+	var type_url_field := first(any_fields, 1)
+	if type_url_field == null or not type_url_field.has("b"):
+		return result
+	
 	var marker := TYPE_URL_PREFIX.to_utf8_buffer()
-	var at := _index_of_bytes(frame, marker, 0)
+	var at := _index_of_bytes(any_bytes, marker, 0)
 	if at < 0:
 		return result
-
+	
 	# Opcodes are always three characters in this protocol.
 	var opcode_start := at + marker.size()
-	if opcode_start + 3 > frame.size():
+	if opcode_start + 3 > any_bytes.size():
 		return result
-	result["opcode"] = frame.slice(opcode_start, opcode_start + 3).get_string_from_utf8()
+	result["opcode"] = any_bytes.slice(opcode_start, opcode_start + 3).get_string_from_utf8()
 
 	# Right behind the type_url comes field 2 of the Any: the message body.
 	var pos := opcode_start + 3
-	if pos < frame.size() and frame[pos] == 0x12:
-		var len_result := read_varint(frame, pos + 1)
+	if pos < any_bytes.size() and any_bytes[pos] == 0x12:
+		var len_result := read_varint(any_bytes, pos + 1)
 		if len_result[0] != null:
 			var body_start: int = int(len_result[1])
 			var body_len: int = int(len_result[0])
-			if body_start + body_len <= frame.size():
-				result["payload"] = frame.slice(body_start, body_start + body_len)
-
-	var f2_root = first(parse(frame), 2) # request_id (only for messages with f2)
-	if f2_root != null and f2_root.has("v"):
-		result["id"] = f2_root["v"]
+			if body_start + body_len <= any_bytes.size():
+				result["payload"] = any_bytes.slice(body_start, body_start + body_len)
+	
+	# For client REQUESTs (root=2) and server ANSWERs (root=3), find the request_id in inner f2
+	# This is the id that the client should echo back in responses
+	if root_num == 2 or root_num == 3:
+		var id_field := first(wrapper_fields, 2)
+		if id_field != null and id_field.has("v"):
+			result["id"] = id_field["v"]
 
 	return result
 
@@ -913,40 +964,43 @@ static func validate_ticket(ticket: Variant) -> Dictionary:
 ## Construye GameMessage kqz para envío al servidor GameNode
 ## El servidor espera un wrapper Any con type_url + uid, NO GameMessage directo
 ## 
-## Formato CORRECTO para kqz TCP:
-##   hea {                          // wrapper envelope
-##     f1: Any {                    // campo 1 del sobre
-##       f1: "type.ankama.com/kqz"  // type_url del Any
-##       f2: GameMessage {          // payload serializado del Any
-##         f1: AuthenticationMessage {
-##           f2: ticket (string)
-##           f3: language (string)
+## Formato CORRECTO para kqz TCP (per especificación):
+##   root {                           // outer envelope with field 2 as root
+##     f2: hea {                      // inner envelope (wrapper)
+##       f1: Any {                   // campo 1 del sobre
+##         f1: "type.ankama.com/kqz"  // type_url del Any
+##         f2: GameMessage {          // payload serializado del Any
+##           f1: AuthenticationMessage {
+##             f2: ticket (string)
+##             f3: language (string)
+##           }
 ##         }
 ##       }
-##     f2: -1                      // uid como varint en campo 2 del sobre
+##     f2: -1                       // uid como varint en campo 2 del sobre
 ##   }
 ##
 ## NOTA: El server rechaza GameMessage directo sin wrapper. 
-## El byte example original dice length=61 pero el payload real es ~43 bytes.
+## El framing con VarInt prefix se agrega en send_ticket().
+## Basado en: Spec 001 RF-6.1, RF-6.2, RF-6.3, y docs/PROTOCOLO/01-TRANSPORTE.md líneas 85-99
 ##
 ## Args:
 ##     ticket: String - 32 caracteres hexadecimales (se valida y normaliza)
 ##     lang: String - Código ISO 639-1 (ej: "es", "en")
 ##
 ## Returns:
-##     PackedByteArray - hea envelope listo para envío, o PackedByteArray vacío si ticket inválido
+##     PackedByteArray - kqz message with outer envelope (f2 as root), o PackedByteArray vacío si ticket inválido
 static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
 	"""Construye kqz con wrapper Any y uid.
 	
-	El servidor espera: hea { f1: Any, f2: -1 }
-	donde Any { f1: "type.ankama.com/kqz", f2: GameMessage }
+	El servidor espera: root { f2: hea { f1: Any, f2: -1 } }
+	donde hea { f1: "type.ankama.com/kqz", f2: GameMessage }
 	
 	Args:
 		ticket: 32 caracteres hexadecimales (se valida automáticamente)
 		lang: código ISO 639-1
 	
 	Returns:
-		PackedByteArray - hea envelope, o PackedByteArray vacío si ticket inválido
+		PackedByteArray - kqz message with outer envelope, o PackedByteArray vacío si ticket inválido
 	"""
 	# Validar ticket primero (RF-6.2)
 	var validation = validate_ticket(ticket)
@@ -973,10 +1027,17 @@ static func build_kqz_message(ticket: String, lang: String) -> PackedByteArray:
 	put_string(any_msg, 1, type_url)  # f1 = type_url
 	put_bytes(any_msg, 2, game_msg)   # f2 = payload
 	
-	# Paso 4: Construir el sobre hea { f1: Any, f2: uid }
-	var envelope := PackedByteArray()
-	put_bytes(envelope, 1, any_msg)   # f1 = Any wrapper
-	put_varint(envelope, 2, -1)       # f2 = uid = -1 (no correlation)
+	# Paso 4: Construir el sobre hea { f1: Any, f2: -1 }
+	# NOTA: El order de los campos no afecta la serialización protobuf
+	# Los campos se ordenan por número de campo al serializar
+	var hea_envelope := PackedByteArray()
+	put_bytes(hea_envelope, 1, any_msg)   # f1 = Any wrapper
+	put_varint(hea_envelope, 2, -1)       # f2 = uid = -1
 	
-	return envelope
+	# Paso 5: Construir outer envelope con f2 como raíz (para client requests)
+	# Según spec: root { 2 { f1: Any, f2: id } }
+	var root := PackedByteArray()
+	put_bytes(root, 2, hea_envelope)
+	
+	return root
 }
