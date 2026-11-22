@@ -255,16 +255,16 @@ func select_character_from_id(character_id: int, character_name: String) -> void
 	selected_character = current_character # Update selected_character alias
 	if game_client != null:
 		game_client.send_character_selection(character_id)
-		# lqc is the client saying it has digested block 1; the server answers with
-		# the map. It is sent here rather than on a later trigger because the
-		# emulator sends block 1 and 2 before it reads the next frame, so this
-		# queues behind them and the order on the wire is the real one.
-		game_client.send_push("lqc")
+		# NOTE: Godot client NO envía lqc (load complete confirmation).
+		# El servidor tiene un timer de 5 segundos para enviar el bloque de mapa (jru) a clientes Godot
+		# que no envían lqc/kqo como el cliente Dofus estándar.
+		# Ver: docs/Protocolosactualziados/opcodes/maps/README.md
+		# Ver también: Jondo.Unity.Server/docs/GODOT-CLIENT-PROTOCOL.md
 
 	# Emit character selected signal
 	character_selected.emit(character_id, character_name)
 
-	# The map block arrives after the lqc that select_character_from_id sends;
+	# The map block arrives after the kvw that select_character_from_id sends;
 	# this timer is only the safety net if it never does.
 	start_map_block_timer()
 

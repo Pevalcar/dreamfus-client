@@ -68,9 +68,10 @@
 
 - **RF-10:** CUANDO el jugador selecciona un personaje, EL SISTEMA:
   - Envía `kvw { f1: character_id }` como REQUEST al servidor (envelope campo raíz `f2`)
-  - Envía `lqc` (character digest) para confirmar selección
+  - **NO envía `lqc`** - el cliente Godot NO envía load complete confirmation
+  - El servidor tiene un timer de 5 segundos para enviar el bloque de mapa (jru) a clientes Godot
   - Cambia el estado a IN_GAME
-  - Inicia la descarga del bloque de mapa (`jru`)
+  - Inicia la descarga del bloque de mapa (`jru`) vía timer de 5s
 
 ---
 
@@ -105,9 +106,10 @@ kvi: f1 (repetido) {
 ## Criterios de finalización
 
 - ✅ Lista de personajes cargada y mostrada desde kvi protocol
-- ✅ Selección de personaje inicia el mapa con kvw/lqc
+- ✅ Selección de personaje inicia el mapa con kvw (sin lqc, usa timer de 5s)
 - ✅ Personaje muestra su aspecto correcto (look string)
 - ✅ Manejo de lista vacía (sin personajes)
+- ✅ **kvw enviado como REQUEST** (envelope f2), no como PUSH
 
 ---
 
