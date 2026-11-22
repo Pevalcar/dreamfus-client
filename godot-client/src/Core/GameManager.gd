@@ -20,6 +20,7 @@ enum GameState {
 const WorldProto = preload("res://src/Network/WorldProto.gd")
 const Proto = preload("res://src/Network/Proto.gd")
 const CharacterData = preload("res://src/Data/CharacterData.gd")
+const CharacterManager = preload("res://src/Network/CharacterManager.gd")
 
 ## Static reference to this singleton instance
 static var instance: GameManager = null
@@ -49,6 +50,9 @@ var server_port: int = 5555
 ## Connection references
 var ws_client: Node = null
 var game_client: GameClient = null
+
+## Character handling
+var _character_manager: CharacterManager = null
 
 ## Current game state
 var state: GameState = GameState.LAUNCHER
@@ -108,7 +112,9 @@ func initialize(ws: Node = null, game: Node = null) -> void:
 		game_client.connected.connect(_on_tcp_connected)
 		game_client.disconnected.connect(_on_tcp_disconnected)
 		game_client.message_received.connect(_on_tcp_message_received)
-		game_client.characters_received.connect(_on_characters_received)
+		# Note: GameClient does not emit characters_received signal directly
+		# - Character data is received via message_received -> handle_tcp_message -> _handle_kvi_messages
+		# - characters_received is emitted by GameManager after jtg in _handle_jtg_end_of_burst
 
 	print("[GameManager] Initialization complete")
 
@@ -430,7 +436,6 @@ func _handle_kra_ack(payload: PackedByteArray) -> void:
 	# kra is an empty acknowledgment that the server accepted the kqz ticket
 	# This signals the start of the welcome burst sequence: kra → kvi → jtg
 	_current_auth_stage = "waiting_for_kvi"
- 
 
 # Handle kvi (character list) message - part of welcome burst
 func _handle_kvi_messages(payload: PackedByteArray) -> void:
@@ -448,10 +453,22 @@ func _handle_kvi_messages(payload: PackedByteArray) -> void:
 					char_data.get("sex", 0),
 				]
 			)
-		# Character list is now emitted by GameClient.characters_received
-		# This is stored in GameManager for other handlers if needed
-		if GameManager.instance != null:
-			GameManager.instance.characters = chars
+	
+	# Transform kvi data to CharacterData using CharacterManager
+	var character_data_list: Array = []
+	if chars != null and chars.size() > 0:
+		# Create CharacterManager if not exists
+		if _character_manager == null:
+			_character_manager = CharacterManager.new()
+		# Transform the data
+		character_data_list = _character_manager.transform_kvi_data(chars)
+		
+		# Store transformed characters for UI access
+		characters = character_data_list
+	else:
+		# Handle empty character list (new player without characters)
+		characters = []
+		print("[GameManager] Lista de personajes vacía - jugador nuevo")
 
 
 # Handle jtg (end of burst) message
@@ -459,6 +476,12 @@ func _handle_jtg_end_of_burst(payload: PackedByteArray) -> void:
 	print("[GameManager] jtg recibido — burst completo (%d personajes)" % characters.size())
 	# Emit characters_received to UI after jtg signals burst completion
 	# Per protocol: jtg is the trigger that the character list is complete
+	# Emit CharacterData objects, not raw dictionaries
+	for char in characters:
+		if char is CharacterData:
+			print("[GameManager]   - %s (ID: %d, lvl: %d)" % [char.character_name, char.character_id, char.level])
+		else:
+			print("[GameManager]   - (raw data) %s" % str(char))
 	characters_received.emit(characters)
 
 

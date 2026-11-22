@@ -99,11 +99,11 @@ message SexContainer {
 
 **Uso en kvw:**
 ```gdscript
-# kvw es un mensaje PUSH, no REQUEST
-# Formato: f1 { f1: { f1: character_id } }
+# kvw es un REQUEST (envelope f2), no PUSH (envelope f1)
+# Formato: f2 { f1: Any { f1: "type.ankama.com/kvw", f2: character_id } }
 func send_character_selection(character_id: int) -> void:
     var inner_msg = Proto.message(1, Proto.put_varint_data(1, character_id))
-    send_push("kvw", inner_msg)
+    send_request("kvw", inner_msg)
 ```
 
 ### 2. GameClient.gd - Cliente TCP
@@ -351,20 +351,20 @@ if traits_field != null:
 
 ### Commit de Arreglo: send_character_selection()
 
-**Problema:** Se usaba `send_request()` en lugar de `send_push()`.
+**Problema:** Se usaba `send_push()` en lugar de `send_request()`.
 
 **Error original:**
 ```gdscript
-# INCORRECTO - kvw no es un request
+# INCORRECTO - kvw es un REQUEST (envelope f2), no PUSH (envelope f1)
 func send_character_selection(character_id: int):
-    var payload = Proto.request("kvw", ...)  # Wrong!
+    var payload = Proto.push("kvw", ...)  # Wrong!
 ```
 
 **Corrección:**
 ```gdscript
-# CORRECTO - kvw es un PUSH
+# CORRECTO - kvw es un REQUEST
 func send_character_selection(character_id: int):
-    var payload = Proto.push("kvw", ...)  # Correct!
+    var payload = Proto.request("kvw", ...)  # Correct!
 ```
 
 ## Referencias

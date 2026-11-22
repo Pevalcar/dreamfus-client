@@ -2,62 +2,58 @@
   "version": "1.0.0",
   "created_at": "2025-01-15T00:00:00Z",
   "agents_md_checked": true,
-  "spec_updated": "2026-11-20",
+  "spec_updated": "2026-11-21",
   "clarification": {
     "status": "PASS",
     "critical_count": 0,
     "high_count": 0,
-    "report_path": "specs/001-login-flow/clarify-report.md",
+    "report_path": "specs/002-character-selection/clarify-report.md",
     "remediation_completed": true
   },
   "plan": {
     "status": "generated",
     "path": "specs/001-login-flow/plan.md"
   },
-  "tasks": {
-    "status": "completed",
-    "path": "specs/001-login-flow/tasks.md",
-    "total_tasks": 10,
-    "completed_tasks": 10,
-    "current_task": "T-FINAL",
-    "next_task": "T-FINAL",
-    "remaining_tasks": ["T-FINAL"],
-    "tasks_detail": {
-      "T1": { "status": "completed", "date": "2026-11-20", "tests": 5 },
-      "T2": { "status": "completed", "date": "2026-11-20", "tests": 10 },
-      "T3": { "status": "completed", "date": "2026-11-20", "tests": 3 },
-      "T4": { "status": "completed", "date": "2026-11-20", "tests": 30 },
-      "T5": { "status": "completed", "date": "2026-11-20", "tests": 50 },
-      "T6": { "status": "completed", "date": "2026-11-20", "tests": 60 },
-      "T7": { "status": "completed", "date": "2026-11-20", "tests": 60 },
-      "T8": { "status": "completed", "date": "2026-11-20", "tests": 70 },
-      "T9": { "status": "completed", "date": "2026-11-20", "tests": 45 },
-      "T10": { "status": "completed", "date": "2026-11-20", "tests": 8 }
-    },
-    "total_tests": 391,
-    "files_created": [
-      "godot-client/src/Core/AuthManager.gd",
-      "godot-client/src/Data/AuthError.gd",
-      "godot-client/test/BurstProcessingTest.gd",
-      "godot-client/test/WalkingSkeletonTest.gd",
-      "godot-client/src/Core/AuthErrorManager.gd",
-      "godot-client/test/ErrorHandlingTest.gd",
-      "godot-client/test/InvalidTokenTest.gd"
-    ],
-    "files_modified": [
-      "godot-client/src/Network/Proto.gd",
-      "godot-client/src/Network/GameClient.gd",
-      "godot-client/src/Network/SimpleProtocolClient.gd",
-      "godot-client/src/Core/GameManager.gd"
-    ]
+  "plan_002": {
+    "status": "generated",
+    "path": "specs/002-character-selection/plan.md"
   },
-  "phase": "tasks",
-  "current_phase": "sdd-validate",
-  "active_task": "T-FINAL",
-  "next_allowed_phase": "sdd-validate",
+  "tasks": {
+    "status": "in_progress",
+    "path": "specs/002-character-selection/tasks.md",
+    "total_tasks": 6,
+    "completed_tasks": 5,
+    "current_task": "T6",
+    "next_task": "T6",
+    "remaining_tasks": ["T6"]
+  },
+  "phase": "plan",
+  "current_phase": "sdd-tasks",
+  "active_task": "T6",
+  "next_allowed_phase": "sdd-implement",
   "approved_phases": ["setup", "constitution", "backlog", "spec", "clarify", "plan", "tasks", "sdd-implement", "sdd-validate"],
-  "active_spec_dir": "specs/001-login-flow",
+  "active_spec_dir": "specs/002-character-selection",
   "gate_status": "approved",
+  "validation_reports": {
+    "001-login-flow": {
+      "status": "REJECTED",
+      "report_path": "specs/001-login-flow/validate-report.md",
+      "reason": "RF-1 y RF-2 (login HTTP) no implementados - HttpClient.gd:140-149 contiene TODO que devuelve siempre error",
+      "cyclic_status": "REJECTED"
+    },
+    "002-character-selection": {
+      "status": "PASS",
+      "report_path": "specs/002-character-selection/clarify-report.md",
+      "reason": "Spec auditado y aprobado - flujo alineado con protocolo TCP kvi/jtg existente",
+      "cyclic_status": "APPROVED",
+      "clarification": {
+        "status": "PASS",
+        "critical_count": 0,
+        "high_count": 0,
+        "report_path": "specs/002-character-selection/clarify-report.md"
+      }
+    }
+  },
   "principles": {
     "P-001": { "id": "P-001", "title": "Stack Estricto", "approved": true, "verified": true },
     "P-002": { "id": "P-002", "title": "Testing Obligatorio con GUT", "approved": true, "notes": "Tests created - cannot run due to Godot 4.8 not installed" },
@@ -67,131 +63,28 @@
     "P-006": { "id": "P-006", "title": "Convenciones de Desarrollo", "approved": true, "notes": "Código en español, naming consistente" }
   },
   "implementation": {
-    "T1": {
-      "status": "completed",
-      "rf_covered": ["RF-1", "RF-2", "RF-10"],
-      "files_modified": [
-        "godot-client/src/Core/HttpClient.gd",
-        "godot-client/test/HttpClientTest.gd"
-      ],
-      "files_created": [],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
+    "001-login-flow": {
+      "status": "rejected",
+      "rf_covered": ["RF-1", "RF-2", "RF-3", "RF-4", "RF-5", "RF-6", "RF-7", "RF-8", "RF-9", "RF-10"],
+      "issues": ["RF-1/RF-2: HTTP call no implementado - TODO en HttpClient.gd:140-149"]
     },
-    "T2": {
-      "status": "completed",
-      "rf_covered": ["RF-6.2", "RNF-4"],
-      "files_modified": [
-        "godot-client/src/Network/Proto.gd"
+    "002-character-selection": {
+      "status": "in_progress",
+      "rf_covered": ["RF-8", "RF-9", "RF-10"],
+      "files_to_create": [
+        "godot-client/src/Data/CharacterList.gd",
+        "godot-client/src/Network/CharacterManager.gd"
       ],
-      "files_created": [
-        "godot-client/test/TicketValidationTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T3": {
-      "status": "completed",
-      "rf_covered": ["RF-9"],
-      "files_modified": [],
-      "files_created": [
-        "godot-client/src/Data/AuthError.gd",
-        "godot-client/test/AuthErrorTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T4": {
-      "status": "completed",
-      "rf_covered": ["RF-3", "RF-4", "RF-9"],
-      "files_modified": [
-        "godot-client/src/Network/SimpleProtocolClient.gd"
-      ],
-      "files_created": [
-        "godot-client/test/WebSocketClientTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T5": {
-      "status": "completed",
-      "rf_covered": ["RF-5", "RF-6.2", "RF-6.3"],
-      "files_modified": [
-        "godot-client/src/Network/SimpleProtocolClient.gd"
-      ],
-      "files_created": [
-        "godot-client/test/ServerSelectionTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T6": {
-      "status": "completed",
-      "rf_covered": ["RF-6", "RF-6.1", "RF-6.3"],
-      "files_modified": [
-        "godot-client/src/Network/GameClient.gd"
-      ],
-      "files_created": [
-        "godot-client/test/TcpKqzTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T7": {
-      "status": "completed",
-      "rf_covered": ["RF-8"],
-      "files_modified": [
+      "files_to_modify": [
         "godot-client/src/Core/GameManager.gd"
       ],
-      "files_created": [
-        "godot-client/test/BurstProcessingTest.gd"
+      "completed_files": [
+        "godot-client/src/Data/CharacterData.gd",
+        "godot-client/src/Data/CharacterList.gd",
+        "godot-client/src/Network/CharacterManager.gd"
       ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T8": {
-      "status": "completed",
-      "rf_covered": ["RF-1", "RF-2", "RF-5", "RF-6", "RF-7"],
-      "files_modified": [],
-      "files_created": [
-        "godot-client/src/Core/AuthManager.gd",
-        "godot-client/test/WalkingSkeletonTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T9": {
-      "status": "completed",
-      "rf_covered": ["RF-7", "RF-9"],
-      "files_modified": [],
-      "files_created": [
-        "godot-client/src/Core/AuthErrorManager.gd",
-        "godot-client/test/ErrorHandlingTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
-    },
-    "T10": {
-      "status": "completed",
-      "rf_covered": ["RF-9"],
-      "files_modified": [
-        "godot-client/src/Network/SimpleProtocolClient.gd"
-      ],
-      "files_created": [
-        "godot-client/test/InvalidTokenTest.gd"
-      ],
-      "blast_radius": 2,
-      "lint_passed": true,
-      "no_hardcoded_credentials": true
+      "tasks_completed": ["T1", "T2", "T3", "T4", "T5"],
+      "tasks_remaining": ["T6"]
     }
   },
   "mode": "human-gated"

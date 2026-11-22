@@ -20,8 +20,17 @@ func set_id(value: int) -> void:
 @export var experience: int = 0
 @export var next_level_experience: int = 0
 
-# Breed
+# Breed (protocol) - legacy field
 @export var breed: int = 0
+
+# Race (spec 002) - alias for breed, 0-11 clases
+@export var race: int = 0
+
+# Sex (spec 002) - 0=femenino, 1=masculino
+@export var sex: int = 0
+
+# Aspect/Look (spec 002) - base64 encoded sprite data
+@export var aspect: String = ""
 
 # Economy
 @export var kamas: int = 0
@@ -130,7 +139,12 @@ func to_dict() -> Dictionary:
 		"spells": spells,
 		"inventory": inventory,
 		"spell_bar": spell_bar,
-		"alignment": alignment
+		"alignment": alignment,
+		# Spec 002 fields
+		"race": race,
+		"sex": sex,
+		"aspect": aspect,
+		"breed": breed,  # Legacy protocol field
 	}
 
 # Load character state from dictionary
@@ -163,3 +177,11 @@ func from_dict(data: Dictionary) -> void:
 		spell_bar = data.spell_bar
 	if data.has("alignment"):
 		alignment = data.alignment
+	# Map protocol fields to spec fields
+	if data.has("breed"):
+		breed = data.breed
+		race = data.breed  # Spec alias
+	if data.has("sex"):
+		sex = data.sex
+	if data.has("look"):
+		aspect = data.look  # Look is the protocol name for aspect

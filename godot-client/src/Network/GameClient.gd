@@ -278,7 +278,7 @@ func send_character_selection(character_id: int) -> void:
 	var payload := build_character_selection(character_id)
 	if payload.is_empty():
 		return
-	send_push("kvw", payload)
+	send_request("kvw", payload)
 
 
 ## Build and send kqo (heartbeat, every 5 seconds).

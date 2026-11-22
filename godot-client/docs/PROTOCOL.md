@@ -261,7 +261,7 @@ kvw {
 
 **Implementación en Godot:**
 ```gdscript
-# Usa send_push porque kvw es un formato PUSH
+# Usa send_request porque kvw es un REQUEST (envelope f2), no PUSH (envelope f1)
 GameClient.send_character_selection(character_id)
 ```
 

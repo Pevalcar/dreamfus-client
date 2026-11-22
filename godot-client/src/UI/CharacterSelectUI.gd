@@ -123,8 +123,12 @@ func _create_character_slots() -> void:
 	for char_data in _characters:
 		var character_button: CharacterSlot = CHARACTER_BUTTON_SCENE.instantiate()
 		# Use character_name as fallback if id field not available
-		var char_id = char_data.get("id", char_data.get("character_id", 0))
+		var char_id = 0
 		character_button.name = "CharacterSlot_%d" % char_id
+		if char_data is CharacterData:
+			char_id = char_data.character_id
+		elif char_data is Dictionary:
+			char_id = char_data.get("id", char_data.get("character_id", 0))
 		
 		# Configurar datos del personaje
 		character_button.set_character_data(char_data)
