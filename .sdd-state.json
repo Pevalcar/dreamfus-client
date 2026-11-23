@@ -54,17 +54,13 @@
       }
     },
     "003-map-world-entry": {
-      "status": "FAIL",
+      "status": "PASS",
       "report_path": "specs/003-map-world-entry/clarify-report.md",
       "clarification": {
-        "status": "FAIL",
-        "critical_count": 3,
-        "high_count": 3,
-        "open_questions": [
-          "¿Cómo se obtiene el mapa visual exacto desde los archivos .d2p? (parser requerido para formato Ankama D2P)",
-          "¿Cuál es el valor del timer de fallback para jru?",
-          "¿Qué define un 'map ID inválido'?"
-        ]
+        "status": "PASS",
+        "critical_count": 0,
+        "high_count": 0,
+        "report_path": "specs/003-map-world-entry/clarify-report.md"
       }
     }
   },
