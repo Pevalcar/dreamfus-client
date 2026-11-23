@@ -32,8 +32,14 @@
   "active_task": "T6",
   "next_allowed_phase": "sdd-implement",
   "approved_phases": ["setup", "constitution", "backlog", "spec", "clarify", "plan", "tasks", "sdd-implement", "sdd-validate"],
-  "active_spec_dir": "specs/002-character-selection",
+  "active_spec_dir": "specs/003-map-world-entry",
   "gate_status": "approved",
+  "validation_reports": {
+    "003-map-world-entry": {
+      "status": "pending_clarification",
+      "duda_abierta": "¿Cómo se obtiene el mapa visual exacto desde los archivos .d2p? ¿Se requiere herramienta de decompilación externa o Godot puede leerlos directamente?"
+    }
+  },
   "validation_reports": {
     "001-login-flow": {
       "status": "REJECTED",
