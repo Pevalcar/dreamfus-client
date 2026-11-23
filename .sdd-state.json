@@ -35,12 +35,6 @@
   "active_spec_dir": "specs/003-map-world-entry",
   "gate_status": "approved",
   "validation_reports": {
-    "003-map-world-entry": {
-      "status": "pending_clarification",
-      "duda_abierta": "¿Cómo se obtiene el mapa visual exacto desde los archivos .d2p? ¿Se requiere herramienta de decompilación externa o Godot puede leerlos directamente?"
-    }
-  },
-  "validation_reports": {
     "001-login-flow": {
       "status": "REJECTED",
       "report_path": "specs/001-login-flow/validate-report.md",
@@ -57,6 +51,20 @@
         "critical_count": 0,
         "high_count": 0,
         "report_path": "specs/002-character-selection/clarify-report.md"
+      }
+    },
+    "003-map-world-entry": {
+      "status": "FAIL",
+      "report_path": "specs/003-map-world-entry/clarify-report.md",
+      "clarification": {
+        "status": "FAIL",
+        "critical_count": 3,
+        "high_count": 3,
+        "open_questions": [
+          "¿Cómo se obtiene el mapa visual exacto desde los archivos .d2p? (parser requerido para formato Ankama D2P)",
+          "¿Cuál es el valor del timer de fallback para jru?",
+          "¿Qué define un 'map ID inválido'?"
+        ]
       }
     }
   },
