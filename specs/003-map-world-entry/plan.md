@@ -56,6 +56,7 @@ godot-client/
 | T2.2: Crear MapRenderer.gd (Node2D + TileMap) | `src/Systems/MapRenderer.gd` | 1.5h | 🔴 Crítica |
 | T2.3: Implementar isometría CellID→Vector2 | `MapRenderer.gd` | 45 min | 🔴 Crítica |
 | T2.4: Cachear tilesets cargados | `MapRenderer.gd` | 30 min | 🟡 Alta |
+| T2.5: **Mapa único grid + actualización dinámica** | `MapRenderer.gd` | 45 min | 🔴 Crítica |
 
 ### Fase 3: Sistema de cámara ⏱️ 2h
 
@@ -184,7 +185,32 @@ graph TD
 
 4. **Assets:** Los `.d2p` de `d3maps` contienen tilesets. Los de `d3gfx_2x` contienen sprites NPCs/characters.
 
-5. **Cache de prototipo:** 100MB inicial, carga solo mapas continuos (10-15 mapas). Se puede expandir a 500MB cuando se implemente el sistema completo de todos los mapas del juego.
+5. **Nota prototipo:** Cache inicial 100MB, expandible posterior a 500MB cuando se integren todos los mapas del juego. Enfoque: solo 10-15 mapas continuos (como los de Astrub) para evitar consumo excesivo de memoria.
+
+### Ruta de assets:
+- `.d2p` files: `C:/Users/pevalcar/AppData/Local/Alea/d3maps/`
+- Map Index: `C:/Users/pevalcar/AppData/Local/Alea/d3maps/map-index.json`
+- Mapa fallback: `191105026` (Astrub zaap)
+
+### Cache de prototipo:
+- Solo 10-15 mapas continuos (como los mapas de Astrub)
+- 100MB inicial, expandable a 500MB
+- Evita consumo excesivo de memoria
+
+---
+
+## 🎯 Enfoque Arquitectónico - Mapa Único Grid Isométrico
+
+El mapa es un **único grid isométrico** donde:
+- Las coordenadas representan información de transitable/no transitable
+- La visualización (suelo, agua, muro) se actualiza dinámicamente
+- Un solo TileMap para todo el mundo (no múltiples mapas)
+
+### Características clave:
+- Coordenadas (x, y) son el estado de la celda
+- Tile ID actualizado dinámicamente según cambios del juego
+- Soporte para capas: suelo, objetos, decoración
+- Actualización en tiempo real de transitable/bloqueado
 
 ---
 

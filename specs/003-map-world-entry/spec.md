@@ -6,7 +6,7 @@ Esta especificación define el sistema de visualización del mapa tras la selecc
 
 **Problema resuelto:** El cliente no puede mostrar el mundo porque el servidor no envía `jru`. Esta spec define un sistema de renderizado que funciona incluso cuando el `jru` falla, usando el map ID esperado (`191105026`) y assets recuperados de la instalación de Alea.
 
-**Nota técnica:** El parser `.d2p` será desarrollado internamente en GDScript puro o adaptado de herramientas open-source existentes con licencia compatible (P-001).
+**Nota técnica:** El parser `.d2p` será desarrollado internamente en GDScript puro o adaptado de herramientas open-source existentes con licencia compatible (P-001). El mapa es un **único grid isométrico** donde las coordenadas contienen información de transitable/no transitable, y el contenido visual (suelo, agua, muro) se actualiza dinámicamente según el estado del juego.
 
 ## Usuarios / actores
 
@@ -26,16 +26,19 @@ Esta especificación define el sistema de visualización del mapa tras la selecc
 - **Datos de avatar:** JSON con `cell_id`, `entity_id`, `kind`, `look` (proviene de mensajes `kva`/`ivx`/`itg`).
 - **Assets de mapa:** Tilesets recuperados de `Alea/d3maps/*.d2p` y `Alea/d3gfx_2x_*.d2p`. El parser `.d2p` genera AtlasTexture compatible.
 - **Tile IDs de terreno:** Enteros que representan tipo de celda (0=vacío, 1=tierra, 2=agua, 3=muro, 4-255=extensión).
+- **Grid de celdas:** Matriz 2D donde cada celda tiene un estado (transitable, bloqueado) y una capa visual (suelo, objeto, decoración).
 
 ### Salidas y efectos observables
 - Screen renders un mapa isométrico con el avatar del jugador en el centro.
 - Avatar se mueve con offset isométrico, respetando colisiones de muro.
 - NPCs aparecen con sprites obtenidos de DB usando `npc_template_id`.
+- El mapa es un único grid: las coordenadas son la información de transitable/no transitable, visualización dinámica.
 
 ### Invariantes (reglas inviolables)
 - **I1:** El jugador nunca puede moverse a una celda con tile ID de muro (colisión).
 - **I2:** El avatar siempre se ve dentro de los límites del mapa.
 - **I3:** Si el map ID es inválido, se usa el mapa por defecto `191105026` (Astrub Zaap).
+- **I4:** El mapa es un único grid isométrico con actualización dinámica de visualización.
 
 ---
 
@@ -49,6 +52,7 @@ Esta especificación define el sistema de visualización del mapa tras la selecc
 | Mapa cargado | Avatar spawneado | Jugando | Sí | RF-1 |
 | Jugando | Moverse en celdas válidas | Jugando | Sí | RF-2 |
 | Jugando | Moverse a muro | Jugando | No | RF-3 |
+| Jugando | Actualizar visualización dinámica | Jugando | Sí | RF-1.2 |
 | Jugando | Desconexión TCP | Conectando | Sí | - |
 | Jugando | Timer fallback expirado | Error timeout | Sí | RF-1.1 |
 
@@ -58,6 +62,7 @@ Esta especificación define el sistema de visualización del mapa tras la selecc
 
 - **RF-1 [H1]:** CUANDO el servidor envía `jru` válido, EL SISTEMA renderiza el mapa en un TileMap isométrico con el avatar del jugador centrado. (Resultado: pantalla muestra mapa con jugador visible).
 - **RF-1.1 [H1]:** CUANDO el servidor envía `jru` vacío o el timer de 30 segundos expira, EL SISTEMA usa el map ID `191105026` como fallback. (Resultado: pantalla muestra Astrub Zaap con jugador spawneado).
+- **RF-1.2 [H1]:** CUANDO el juego actualiza el estado de una celda (muro colocado, puerta abierta), EL SISTEMA actualiza la visualización de esa celda en el TileMap. (Resultado: el mapa refleja el nuevo estado visual).
 - **RF-2 [H1]:** CUANDO el jugador desplaza el ratón por los bordes de pantalla, EL SISTEMA mueve la vista del TileMap isométrico 5px vertical/horizontal cada 0.05s. (Resultado: cámara se desplaza suavemente).
 - **RF-3 [H1]:** CUANDO el jugador intenta moverse a una celda con muro, ENTONCES EL SISTEMA reproduce un sonido de colisión y MANTIENE la posición del avatar. (Resultado: avatar no se mueve, se oye un "boop" breve).
 - **RF-4 [H2]:** CUANDO el servidor envía un mensaje con `cell_id` y `entity_id`, EL SISTEMA posiciona el avatar/NPC en esa celda usando transformación isométrica de CellID. (Resultado: entidades aparecen en coordenadas correctas).
@@ -72,6 +77,7 @@ Esta especificación define el sistema de visualización del mapa tras la selecc
 - **RNF-2 [P-002]:** Tiempo de renderizado inicial < 500ms desde que el map ID es válido.
 - **RNF-3 [P-003]:** Máximo 500 líneas por archivo `.gd` (MapRenderer.gd, TileParser.gd, D2PParser.gd, etc.).
 - **RNF-4 [P-005]:** Los assets se cargan desde cache local (`user://cache/tiles/`) y nunca se almacenan credenciales en ellos.
+- **RNF-5 [P-006]:** El mapa es un único grid isométrico con actualización dinámica de visualización por celda.
 
 ---
 
@@ -85,6 +91,7 @@ Esta especificación define el sistema de visualización del mapa tras la selecc
 - **Race condition timer vs jru válido:** Priorizar el `jru` válido sobre el timer expirado.
 - **Tile ID desconocido (> 255):** Mostrar como "vacío" (tile ID 0).
 - **Cache saturada:** Evictar tiles menos usados mediante LRU (máx. 500MB).
+- **Actualización dinámica fallida:** Mantener visualización anterior, loggear error.
 
 ---
 
@@ -105,6 +112,7 @@ Esta especificación define el sistema de visualización del mapa tras la selecc
 - ✅ Cumplimiento verificado contra `docs/constitution.md` (P-001 a P-005)
 - ✅ Mapa `191105026` renderido correctamente con avatar del jugador
 - ✅ Parser `.d2p` funcional y documentado
+- ✅ Mapa como único grid isométrico con actualización dinámica
 
 ---
 

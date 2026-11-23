@@ -141,51 +141,57 @@
 
 #### T2.2: MapRenderer (Node2D + TileMap)
 
-**Objetivo:** Renderizar mapa isométrico usando TileMap de Godot.
+**Objetivo:** Renderizar mapa isométrico usando TileMap de Godot como único grid.
 
 **Reglas Escras:**
 - [ ] Root node: `Node2D` con hijo `TileMap`
 - [ ] TileMap configurado con `mode = TILE_MODE_ISOMETRIC`
 - [ ] CellSize: `Vector2i(32, 16)`
-- [ ] Método `render_map(map_data: Dictionary)`
-- [ ] Método `set_tile(x: int, y: int, tile_id: int)`
-- [ ] Método `clear()` remueve todos los tiles
-- [ ] Soporte para múltiples layers (terreno, objetos, decoración)
+- [ ] Método `render_map(map_data: Dictionary)` carga mapa completo
+- [ ] Método `set_tile(x: int, y: int, tile_id: int)` para celdas individuales
+- [ ] **UN SOLO TILEMAP** para todo el mundo (no múltiples mapas)
+- [ ] Coordenadas (x, y) son el estado de la celda, no el contenido visual
+- [ ] Método `update_cell_visual(x: int, y: int, tile_id: int)` actualiza visual dinámicamente
+- [ ] Soporte para capas: suelo, objetos, decoración
 
 **Criterios de aceptación:**
 1. TileMap renderiza grid isométrico visible
 2. `set_tile(0, 0, 1)` pinta tile ID 1 en posición (0,0)
-3. `clear()` limpia todos los tiles sin error
-4. CellSize verificado con `tile_map.cell_size`
+3. Coordenadas (x, y) representan estado de celda, no visualización
+4. Visualización se actualiza dinámicamente con `update_cell_visual()`
+5. CellSize verificado con `tile_map.cell_size`
 
 **Archivos a crear:**
 - `godot-client/src/Systems/MapRenderer.gd` (≤ 500 líneas)
 
-**RF asociado:** RF-1, I2
+**RF asociado:** RF-1, I2, I4
 
 ---
 
-#### T2.3: CellID → Coordenadas isométricas
+#### T2.3: CellID → Coordenadas isométricas + Estado de celda
 
-**Objetivo:** Convertir CellID del protocolo a coordenadas 2D isométricas.
+**Objetivo:** Convertir CellID del protocolo a coordenadas 2D isométricas y manejar el estado de celda (transitable/no transitable).
 
 **Reglas Escras:**
 - [ ] Fórmula: `cell_x = cell_id % map_width`, `cell_y = cell_id / map_width`
-- [ ] Método `cell_to_iso(cell_id: int) -> Vector2i`
-- [ ] Coordenadas isométricas: `x_iso = (cell_x - cell_y) * tile_width/2`, `y_iso = (cell_x + cell_y) * tile_height/2`
-- [ ] Manejar bordes del mapa (no salir de rango)
+- [ ] Método `cell_to_iso(cell_id: int) -> Vector2i` para posiciones sprite
+- [ ] Método `cell_id_to_coords(cell_id: int, map_width: int) -> Vector2i` para coordenadas lógicas
+- [ ] Coordenadas (x, y) son el estado de la celda, NO contenido visual
+- [ ] Visualización separada: el TileID representa el tipo visual de la celda
+- [ ] Método `is_cell_transitable(x: int, y: int) -> bool` verifica colisión
 - [ ] Cache resultados conversión (optimización)
 
 **Criterios de aceptación:**
 1. `cell_to_iso(0)` → `(0, 0)` para mapa de ancho 1
-2. `cell_to_iso(1)` → `(offset_x, offset_y)` según fórmula
+2. `cell_id_to_coords(133105026, 200)` → `(x, y)` calculado correctamente
 3. Coordenadas isométricas visibles en pantalla
 4. Consistente con protocolo Dofus
+5. `is_cell_transitable()` devuelve false para muros
 
 **Archivos a modificar:**
-- `godot-client/src/Systems/MapRenderer.gd` (agregar método)
+- `godot-client/src/Systems/MapRenderer.gd`
 
-**RF asociado:** RF-4, I2
+**RF asociado:** RF-4, I1, I2
 
 ---
 
@@ -210,6 +216,34 @@
 - `godot-client/src/Systems/MapRenderer.gd` ( agregar cache)
 
 **RF asociado:** RF-1, RF-6, RNF-4
+
+---
+
+#### T2.5: Mapa único grid - actualización dinámica
+
+**Objetivo:** Implementar mapa como único grid isométrico con actualización dinámica de visualización por celda. Las coordenadas representan estado (transitable/bloqueado), no contenido visual.
+
+**Reglas Escras:**
+- [ ] Coordenadas (x, y) son el estado de la celda, NO contenido visual
+- [ ] Un solo TileMap para todo el mundo (no múltiples mapas)
+- [ ] Tile ID representa tipo visual: 0= Vacío, 1= Tierra, 2= Agua, 3= Muro
+- [ ] Método `update_cell_visual(x: int, y: int, tile_id: int)` para cambios en tiempo real
+- [ ] Método `get_cell_state(x: int, y: int) -> Dictionary` devuelve estado transitable/bloqueado
+- [ ] Soporte para capas: suelo, objetos, decoración (z-index)
+- [ ] Batch update para cambios múltiples simultáneos con `update_cells_batch(cells: Array)`
+- [ ] Sincronización thread-safe para updates del servidor
+
+**Criterios de aceptación:**
+1. Coordenadas (0,0) a (width-1, height-1) mapeadas correctamente
+2. `update_cell_visual(x, y, tile_id)` actualiza visual sin re-render completo
+3. Capas renderizadas en orden correcto (suelo → objetos → decoración)
+4. Actualización dinámica reflejada en menos de 50ms
+5. `get_cell_state()` devuelve transitable=false para muros
+
+**Archivos a modificar:**
+- `godot-client/src/Systems/MapRenderer.gd`
+
+**RF asociado:** RF-1.2, I1, I2, I4
 
 ---
 
@@ -425,6 +459,31 @@
 - `godot-client/test/test_camera.gd`
 
 **RF asociado:** RF-2
+
+---
+
+## 🎯 Enfoque Arquitectónico - Mapa Único Grid Isométrico
+
+**Definición:** El mapa es un **único grid isométrico** donde:
+- Las coordenadas representan información de transitable/no transitable
+- La visualización (suelo, agua, muro) se actualiza dinámicamente
+- Un solo TileMap para todo el mundo (no múltiples mapas)
+
+### Características clave:
+- Coordenadas (x, y) son el estado de la celda (transitable/bloqueado)
+- Tile ID actualizado dinámicamente según cambios del juego
+- Soporte para capas: suelo, objetos, decoración
+- Actualización en tiempo real de transitable/bloqueado
+
+### Ruta de assets:
+- `.d2p` files: `C:/Users/pevalcar/AppData/Local/Alea/d3maps/`
+- Map Index: `C:/Users/pevalcar/AppData/Local/Alea/d3maps/map-index.json`
+- Mapa fallback: `191105026` (Astrub zaap)
+
+### Cache de prototipo:
+- Solo 10-15 mapas continuos (como los de Astrub)
+- 100MB inicial, expandable a 500MB
+- Evita consumo excesivo de memoria
 
 ---
 
