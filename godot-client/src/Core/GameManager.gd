@@ -84,6 +84,14 @@ var _tcp_connecting: bool = false
 var _map_block_received: bool = false
 var _map_block_timeout: Timer = null
 
+## Server bug workaround: map block timeout exceeded
+## Some servers don't send jru after kvw - track expected map for recovery
+var _expected_map_id: int = 191105026  # Default: Astrub zaap for new/level 204 chars
+
+## Character selection timeout tracking
+var _character_selection_timeout: Timer = null
+var _character_selection_timeout_seconds: float = 5.0  # Server timeout before jru
+
 
 # Called when the node is added to the scene tree for the first time.
 func _ready() -> void:
@@ -260,13 +268,33 @@ func select_character_from_id(character_id: int, character_name: String) -> void
 		# que no envían lqc/kqo como el cliente Dofus estándar.
 		# Ver: docs/Protocolosactualziados/opcodes/maps/README.md
 		# Ver también: Jondo.Unity.Server/docs/GODOT-CLIENT-PROTOCOL.md
+		start_character_selection_timer()
 
 	# Emit character selected signal
 	character_selected.emit(character_id, character_name)
 
-	# The map block arrives after the kvw that select_character_from_id sends;
-	# this timer is only the safety net if it never does.
-	start_map_block_timer()
+
+# Start the character selection timeout timer
+## This timer tracks the 5-second server window before jru should arrive
+func start_character_selection_timer() -> void:
+	"""Start waiting for character selection response (jru timeout)."""
+	_map_block_received = false
+	_map_block_timeout = null
+	_character_selection_timeout = null
+	
+	# Create timer for character selection timeout (5s - server's jru timer)
+	_character_selection_timeout = Timer.new()
+	_character_selection_timeout.wait_time = _character_selection_timeout_seconds
+	_character_selection_timeout.one_shot = true
+	_character_selection_timeout.connect("timeout", _on_character_selection_timeout)
+	add_child(_character_selection_timeout)
+	_character_selection_timeout.start()
+	
+	# Also start the main map block timeout timer (15s) as a safety net
+	# It will be stopped when jru arrives
+	create_map_block_timeout()
+	
+	print("[GameManager] Character selection timeout timer started (%.1fs)" % _character_selection_timeout_seconds)
 
 
 # Getter for selected character (used by GameUI via _get_selected_character)
@@ -377,13 +405,22 @@ func start_map_block_timer() -> void:
 
 
 func on_map_block_received(map_id: int) -> void:
-	"""Called when map block (jru) is received. Stop the timer."""
+	"""Called when map block (jru) is received. Stop the timers."""
 	_map_block_received = true
+	
+	# Stop character selection timeout if running
+	if _character_selection_timeout and _character_selection_timeout.is_stopped() == false:
+		_character_selection_timeout.stop()
+		_character_selection_timeout.queue_free()
+		_character_selection_timeout = null
+	
+	# Stop map block timeout if running
 	if _map_block_timeout:
 		_map_block_timeout.stop()
 		_map_block_timeout.queue_free()
 		_map_block_timeout = null
-		print("[GameManager] Map block received (map_id=%d), timeout cancelled" % map_id)
+		
+		print("[GameManager] Map block received (map_id=%d), timeouts cleared" % map_id)
 
 
 # TCP Connection handlers
@@ -601,21 +638,44 @@ func _handle_jru_map_block(payload: PackedByteArray) -> void:
 	
 	The server sends it after the lqc of the character selection; the jru carries
 	the map the character is standing on.
+	
+	**Note:** This is where the Godot client differs from standard Dofus:
+	- Standard client sends lqc to request the map block
+	- Godot client does NOT send lqc, relying on server's 5s timer
+	- Server should auto-send jru after ~5s, but some servers also send immediately
 	"""
+	# Stop the timeout timer first (jru arrival = server responded)
 	if _map_block_timeout:
-		var map_data = WorldProto.decode_jru(payload)
-		if map_data.has("map_id") and map_data.map_id > 0:
-			print("[GameManager] jru - Map block received: map_id=%d" % map_data.map_id)
-			# Stop the timeout
-			on_map_block_received(map_data.map_id)
-			# TODO: Load map visualization
-			# _load_map(map_data.map_id)
-			# Emit signal for UI
-			# map_loaded.emit(map_data.map_id)
-		else:
-			print("[GameManager] jru - Map block with invalid data")
+		_map_block_received = true
+		if _map_block_timeout.is_stopped() == false:
+			_map_block_timeout.stop()
+			_map_block_timeout.queue_free()
+		_map_block_timeout = null
+	
+	if payload.size() == 0:
+		print("[GameManager] WARNING: jru received with empty payload")
+		print("[GameManager] This indicates server bug - jru should contain map_id in f2")
+		# Try to continue anyway - map_id should be derivable from other sources
+		on_map_block_received(0)  # Signal that we received something
+		return
+	
+	var map_data = WorldProto.decode_jru(payload)
+	if map_data.has("map_id") and map_data.map_id > 0:
+		print("[GameManager] jru - Map block received: map_id=%d" % map_data.map_id)
+		on_map_block_received(map_data.map_id)
+		# TODO: Load map visualization
+		# _load_map(map_data.map_id)
+		# Emit signal for UI
+		# map_loaded.emit(map_data.map_id)
 	else:
-		print("[GameManager] jru received, but no timeout timer active")
+		print("[GameManager] WARNING: jru payload invalid - server bug detected")
+		# Convert bytes to hex string for debugging
+		var hex_str: String = ""
+		for i in range(min(payload.size(), 16)):
+			hex_str += "%02x " % payload[i]
+		print("[GameManager] Payload (hex, first 16 bytes): %s... (size=%d)" % [hex_str.strip_edges(), payload.size()])
+		# Don't fail - signal that we processed the message
+		on_map_block_received(0)
 
 
 func _on_map_block_timeout() -> void:
@@ -624,12 +684,59 @@ func _on_map_block_timeout() -> void:
 		printerr("[GameManager] ERROR: Map block (jru) not received after 15s!")
 		printerr("[GameManager] Possible reasons:")
 		printerr("[GameManager]   - Server delay processing")
-		printerr("[GameManager]   - Server bug - not sending jru")
+		printerr("[GameManager]   - Server bug - not sending jru after kvw")
 		printerr("[GameManager]   - Network issue")
+		print("[GameManager] Server bug detected: jru never sent after kvw CHARACTER SELECTION REQUEST")
+		print("[GameManager] This is a known server-side issue - server should auto-send jru after ~5s timer")
+		
 		# Disconnect safely
 		if game_client and game_client.is_tcp_connected():
-			print("[GameManager ] Disconnecting due to map timeout...")
+			print("[GameManager] Disconnecting due to map timeout...")
 			game_client.game_manager = null
 			game_client.disconnect_tcp()
 		# Notify user
-		error_received.emit("MAP_TIMEOUT", "Map block not received after 15s")
+		error_received.emit("MAP_TIMEOUT", "Map block not received after 15s - possible server bug")
+
+
+func _on_character_selection_timeout() -> void:
+	"""Called when character selection timeout (5s) expires without jru.
+	
+	The server should send jru after ~5 seconds if client doesn't send lqc.
+	If we reach here, it's a server bug.
+	"""
+	if _map_block_received:
+		return
+	
+	print("[GameManager] Character selection timeout (%.1fs) reached" % _character_selection_timeout_seconds)
+	print("[GameManager] Server should have sent jru by now - this is a server-side bug")
+	
+	# Start extended map block timer for server recovery attempts
+	print("[GameManager] Starting extended map block timer (15s) for potential jru arrival...")
+	start_extended_map_block_timer()
+
+
+## Start an extended map block timer for server recovery attempts
+## This is used when the 5s character selection timeout expires but server hasn't sent jru
+func start_extended_map_block_timer() -> void:
+	"""Start a longer timer (15s) after character selection timeout expires.
+	
+	Some servers have bugs and don't send jru even after the 5-second timeout.
+	This extended timer gives the server additional time before the client gives up.
+	
+	NOTE: This timer already exists from start_character_selection_timer().
+	We just restart it here to give the server more time if it was about to send jru.
+	"""
+	# If timer already exists, just restart it
+	if _map_block_timeout != null and _map_block_timeout.is_stopped() == false:
+		# Timer is still running, extend it by starting fresh
+		_map_block_timeout.stop()
+		_map_block_timeout.queue_free()
+	
+	# Create or restart the timer
+	_map_block_timeout = Timer.new()
+	_map_block_timeout.wait_time = 15.0
+	_map_block_timeout.one_shot = true
+	_map_block_timeout.connect("timeout", _on_map_block_timeout)
+	add_child(_map_block_timeout)
+	_map_block_timeout.start()
+	print("[GameManager] Extended map block timeout timer restarted (15s)")

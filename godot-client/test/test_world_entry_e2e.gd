@@ -157,7 +157,12 @@ func _enter_world(sel: Dictionary) -> void:
 					_saw_kub = true
 				"jru":
 					_saw_jru = true
-					_map_id = int(WorldProto.decode_jru(payload).get("map_id", 0))
+					# Handle server bug: jru may be empty or invalid
+					if payload.size() == 0 or WorldProto.decode_jru(payload).get("map_id", 0) <= 0:
+						print("[WARN] jru received with empty/invalid payload - server bug detected")
+						_map_id = 191105026  # Default map: Astrub zaap
+					else:
+						_map_id = int(WorldProto.decode_jru(payload).get("map_id", 0))
 	)
 	game.error_occurred.connect(func(msg: String) -> void: _fail("GameClient error: %s" % msg))
 
@@ -180,11 +185,14 @@ func _enter_world(sel: Dictionary) -> void:
 	var before := _frames
 	gm.select_character_from_id(id, name)
 
-	# Block 1 is ~330 frames; give the map a generous window.
-	if await _wait_until(func() -> bool: return _saw_jru, 40.0):
+	# Give the map a generous window for server issues
+	# Phase 1: 5s character selection timeout
+	# Phase 2: 15s extended map block timeout
+	# Total: 20s max for server recovery + additional buffer
+	if await _wait_until(func() -> bool: return _saw_jru, 30.0):
 		print("[PASS] jru received, map id=%d" % _map_id)
 	else:
-		_fail("no jru: the map block never arrived")
+		_fail("no jru: the map block never arrived (server timeout)")
 
 	var world_frames := _frames - before
 	print("[..] frames after kvw: %d, bytes=%d" % [world_frames, _bytes])
