@@ -44,7 +44,7 @@ godot-client/
 
 | Tarea | Archivo | Estimación | Prioridad |
 |-------|---------|------------|-----------|
-| T1.1: Crear TileCache.gd (LRU 500MB) | `src/Data/TileCache.gd` | 45 min | 🔴 Crítica |
+| T1.1: Crear TileCache.gd (LRU 100MB prototipo) | `src/Data/TileCache.gd` | 45 min | 🔴 Crítica |
 | T1.2: Crear D2PParser.gd (header + tiles) | `src/Network/D2PParser.gd` | 1.5h | 🔴 Crítica |
 | T1.3: Escribir tests unitarios TileCache | `test/test_tile_cache.gd` | 30 min | 🟡 Alta |
 
@@ -110,6 +110,8 @@ graph TD
 | Fase 5: Testing | 1h | 10% |
 | **TOTAL** | **10.5h** | **100%** |
 
+**Nota prototipo:** Cache inicial 100MB, expandible posterior a 500MB cuando se integren todos los mapas.
+
 ---
 
 ## 🔗 Dependencias Técnicas
@@ -163,7 +165,7 @@ graph TD
 |--------|---------|------------|
 | Parser .d2p complejo | Bloquea todo | Investigar formato header primero |
 | TileMap isométrico | Rendering lento | Usar `TileMap` con `Mode = ISOMETRIC` |
-| Cache saturada | OOM | Implementar LRU estricto |
+| Cache saturada | OOM | LRU estricto, ajustable 100-500MB según prototipo |
 | Timer race condition | Duplicado render | Priorizar `jru` válido sobre timer |
 
 ---
@@ -181,6 +183,8 @@ graph TD
    ```
 
 4. **Assets:** Los `.d2p` de `d3maps` contienen tilesets. Los de `d3gfx_2x` contienen sprites NPCs/characters.
+
+5. **Cache de prototipo:** 100MB inicial, carga solo mapas continuos (10-15 mapas). Se puede expandir a 500MB cuando se implemente el sistema completo de todos los mapas del juego.
 
 ---
 
